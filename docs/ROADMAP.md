@@ -149,7 +149,7 @@ Total per step: ~1.4 seconds (down from ~3.1s in naive approach)
 
 ### Phase 2: Injected Helpers ✅
 **Deliverables:**
-- [x] `injected-helpers.ts` — full `globalThis.__RN_AGENT` object
+- [x] `injected-helpers.ts` — full `globalThis.__RN_AGENT` object (included in Phase 1)
 - [x] `cdp_component_tree` — fiber walker with filter, depth limit, WeakSet, RedBox detection, 50KB cap, text node capture
 - [x] `cdp_navigation_state` — Expo Router + React Navigation + fiber walk fallback
 - [x] `cdp_error_log` — ErrorUtils hook + Hermes promise rejection tracker + clear option
@@ -159,7 +159,7 @@ Total per step: ~1.4 seconds (down from ~3.1s in naive approach)
 - [x] `cdp_network_log` — CDP Network domain (RN 0.83+) + fetch/XHR hook fallback
 - [x] `cdp_console_log` — Runtime.consoleAPICalled + ring buffer
 - [x] `cdp_store_state` — Redux (fiber walk for Provider) + Zustand (global.__ZUSTAND_STORES__)
-- [x] `ring-buffer.ts` — shared event buffer implementation
+- [x] `ring-buffer.ts` — shared event buffer implementation (included in Phase 1)
 - [x] `cdp_dev_settings` — programmatic reload, toggle inspector, dismiss RedBox
 
 ### Phase 4: Skills ✅
@@ -179,21 +179,13 @@ Total per step: ~1.4 seconds (down from ~3.1s in naive approach)
 
 ### Phase 6: Polish + Speed ✅
 **Deliverables:**
-- [x] `hooks/hooks.json` — SessionStart RN project detection
-- [x] `scripts/snapshot_state.sh` — concurrent screenshot + UI hierarchy
-- [x] maestro-runner auto-detection in skills (prefer over Maestro)
-- [x] Zombie target filtering (pick highest page ID)
-- [x] Reconnect hardening: reject pending on WS close, catch reload errors
-- [x] README.md with installation + usage guide
-
-### Gemini Review Fixes Applied ✅
-- [x] Fixed port override leak in cdp_status (Critical)
-- [x] Added text node capture in fiber tree walker (Critical)
-- [x] Fixed pending promises on WS close + reload error handling (Critical)
-- [x] Fixed filter-before-limit on console/network logs (High)
-- [x] Added clear option to cdp_error_log (High)
-- [x] Added accessibilityLabel extraction in fiber tree (Medium)
-- [x] Used 127.0.0.1 instead of localhost for Node 18+ DNS (Medium)
+- [x] `hooks/hooks.json` — SessionStart RN project detection (detects metro.config, app.json, app.config.js/ts)
+- [x] `scripts/snapshot_state.sh` — concurrent screenshot + UI hierarchy (dump-to-file fix, trap cleanup, exit code handling)
+- [x] `plugin.json` updated with hooks reference
+- [x] Zombie target filtering (pick highest page ID) — implemented in Phase 1 cdp-client.ts
+- [x] Reconnect hardening: reject pending on WS close, catch reload errors — implemented in Phase 1 cdp-client.ts
+- [ ] maestro-runner auto-detection in skills (prefer over Maestro) — deferred to post-MVP
+- [ ] README.md update with installation + usage guide — deferred to post-MVP
 
 ---
 

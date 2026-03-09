@@ -1,3 +1,32 @@
+export interface CDPMessage {
+  id?: number;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+
+export interface PendingCall {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+}
+
+export interface HermesTarget {
+  id: string;
+  title: string;
+  vm: string;
+  webSocketDebuggerUrl: string;
+  description?: string;
+  type?: string;
+}
+
+export interface ConsoleEntry {
+  level: string;
+  text: string;
+  timestamp: string;
+}
+
 export interface NetworkEntry {
   id: string;
   method: string;
@@ -5,13 +34,6 @@ export interface NetworkEntry {
   timestamp: string;
   status?: number;
   duration_ms?: number;
-  size?: number;
-}
-
-export interface ConsoleEntry {
-  level: string;
-  text: string;
-  timestamp: string;
 }
 
 export interface ErrorEntry {
@@ -22,34 +44,24 @@ export interface ErrorEntry {
   timestamp: string;
 }
 
-export interface CDPTarget {
-  id: string;
-  title: string;
-  type: string;
-  vm?: string;
-  webSocketDebuggerUrl: string;
-}
-
-export interface CDPResponse {
-  id: number;
-  result?: {
-    result?: { type: string; value?: unknown; description?: string };
-    exceptionDetails?: { text: string; exception?: { description: string } };
-  };
-  error?: { message: string };
-  method?: string;
-  params?: Record<string, unknown>;
-}
+export type CDPClientState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
 export interface StatusResult {
-  metro: { running: boolean; port: number };
-  cdp: { connected: boolean; device?: string; pageId?: string };
+  metro: {
+    running: boolean;
+    port: number | null;
+  };
+  cdp: {
+    connected: boolean;
+    device: string | null;
+    pageId: string | null;
+  };
   app: {
-    platform?: string;
-    dev?: boolean;
-    hermes?: boolean;
-    rnVersion?: string;
-    dimensions?: { width: number; height: number };
+    platform: string | null;
+    dev: boolean | null;
+    hermes: boolean | null;
+    rnVersion: string | null;
+    dimensions: { width: number; height: number } | null;
     hasRedBox: boolean;
     isPaused: boolean;
     errorCount: number;
@@ -60,3 +72,17 @@ export interface StatusResult {
     networkFallback: boolean;
   };
 }
+
+export interface EvaluateResult {
+  value?: unknown;
+  error?: string;
+}
+
+export function textResult(text: string) {
+  return { content: [{ type: 'text' as const, text }] };
+}
+
+export function errorResult(text: string) {
+  return { content: [{ type: 'text' as const, text }], isError: true as const };
+}
+

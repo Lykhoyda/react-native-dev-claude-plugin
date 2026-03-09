@@ -20,6 +20,7 @@ export const INJECTED_HELPERS = `
     return str;
   }
 
+  // Fiber Tree Walker
   function getTree(maxDepth, filter) {
     var hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (!hook || !hook.renderers || hook.renderers.size === 0) {
@@ -40,7 +41,7 @@ export const INJECTED_HELPERS = `
       if (!fiber) return false;
       var name = fiber.type && (fiber.type.displayName || fiber.type.name);
       if (name === 'LogBox' || name === 'ErrorWindow' || name === 'RedBox') return true;
-      return hasErrorOverlay(fiber.child);
+      return hasErrorOverlay(fiber.child) || hasErrorOverlay(fiber.sibling);
     }
 
     if (hasErrorOverlay(root.current)) {
@@ -60,20 +61,15 @@ export const INJECTED_HELPERS = `
       visited.add(fiber);
       totalNodes++;
 
-      if (fiber.tag === 6 || typeof fiber.memoizedProps === 'string' || typeof fiber.memoizedProps === 'number') {
-        return { text: String(fiber.memoizedProps) };
+      // Text node capture (tag 6)
+      if (fiber.tag === 6 && typeof fiber.memoizedProps === 'string') {
+        return { text: fiber.memoizedProps };
       }
 
       var name = getName(fiber);
-      var testID = fiber.memoizedProps && (fiber.memoizedProps.testID || fiber.memoizedProps.accessibilityLabel || fiber.memoizedProps.nativeID);
+      var testID = fiber.memoizedProps && (fiber.memoizedProps.testID || fiber.memoizedProps.nativeID);
+      var accessibilityLabel = fiber.memoizedProps && fiber.memoizedProps.accessibilityLabel;
       var isUserComponent = name && !name.startsWith('RCT') && /^[A-Z]/.test(name);
-
-      var matchesFilter = true;
-      if (filter) {
-        var f = filter.toLowerCase();
-        matchesFilter = (name && name.toLowerCase().indexOf(f) !== -1) ||
-                        (testID && testID.toLowerCase().indexOf(f) !== -1);
-      }
 
       var children = [];
       var child = fiber.child;
@@ -86,23 +82,20 @@ export const INJECTED_HELPERS = `
       if (!isUserComponent && !testID) {
         if (children.length === 1) return children[0];
         if (children.length === 0) return null;
-        if (filter && !matchesFilter && children.length > 0) {
-          return children.length === 1 ? children[0] : { _wrapper: true, children: children };
-        }
         return { _wrapper: true, children: children };
       }
 
-      if (filter && !matchesFilter && children.length === 0) return null;
-
       var result = { component: name };
       if (testID) result.testID = testID;
+      if (accessibilityLabel) result.accessibilityLabel = accessibilityLabel;
 
       if (isUserComponent && fiber.memoizedProps) {
         var props = {};
-        var entries = Object.entries(fiber.memoizedProps);
-        for (var i = 0; i < entries.length; i++) {
-          var k = entries[i][0], v = entries[i][1];
-          if (k === 'children' || k === 'testID' || k === 'style') continue;
+        var propKeys = Object.keys(fiber.memoizedProps);
+        for (var i = 0; i < propKeys.length; i++) {
+          var k = propKeys[i];
+          if (k === 'children' || k === 'testID' || k === 'style' || k === 'accessibilityLabel' || k === 'nativeID') continue;
+          var v = fiber.memoizedProps[k];
           if (typeof v === 'function') { props[k] = '[Function]'; continue; }
           try {
             var s = JSON.stringify(v);
@@ -132,17 +125,26 @@ export const INJECTED_HELPERS = `
           : children;
       }
 
+      // Filter support
+      if (filter) {
+        var f = filter.toLowerCase();
+        var matchesName = name && name.toLowerCase().indexOf(f) >= 0;
+        var matchesTestID = testID && testID.toLowerCase().indexOf(f) >= 0;
+        if (!matchesName && !matchesTestID && children.length === 0) return null;
+      }
+
       return result;
     }
 
     var tree = walk(root.current, 0);
-    var output = JSON.stringify({ tree: tree, totalNodes: totalNodes });
+    var output = JSON.stringify({ tree: tree, totalNodes: totalNodes }, null, 2);
     if (output.length > 50000) {
-      return JSON.stringify({ error: 'Tree too large (' + output.length + ' bytes). Use a filter parameter to scope the query.' });
+      return JSON.stringify({ error: 'Tree too large (' + output.length + ' chars). Use a filter parameter to scope the query.' });
     }
     return output;
   }
 
+  // Navigation State
   function getNavState() {
     try {
       var state = globalThis.__expo_router_state__;
@@ -174,24 +176,25 @@ export const INJECTED_HELPERS = `
     var navState = findNav(root && root.current);
     if (!navState) return JSON.stringify({ error: 'Navigation state not found. Is React Navigation or Expo Router installed?' });
 
-    function simplify(st) {
-      if (!st) return null;
-      var res = {
-        routeName: st.routes && st.routes[st.index] && st.routes[st.index].name,
-        params: (st.routes && st.routes[st.index] && st.routes[st.index].params) || {},
-        stack: (st.routes && st.routes.map(function(r) { return r.name; })) || [],
-        index: st.index
+    function simplify(s) {
+      if (!s) return null;
+      var r = {
+        routeName: s.routes && s.routes[s.index] && s.routes[s.index].name,
+        params: (s.routes && s.routes[s.index] && s.routes[s.index].params) || {},
+        stack: (s.routes && s.routes.map(function(r) { return r.name; })) || [],
+        index: s.index
       };
-      var activeRoute = st.routes && st.routes[st.index];
+      var activeRoute = s.routes && s.routes[s.index];
       if (activeRoute && activeRoute.state) {
-        res.nested = simplify(activeRoute.state);
+        r.nested = simplify(activeRoute.state);
       }
-      return res;
+      return r;
     }
 
     return JSON.stringify(simplify(navState));
   }
 
+  // Store State
   function getStoreState(path) {
     var state = null;
     var storeType = null;
@@ -201,9 +204,10 @@ export const INJECTED_HELPERS = `
       storeType = 'redux';
     } else if (globalThis.__ZUSTAND_STORES__) {
       var result = {};
-      var entries = Object.entries(globalThis.__ZUSTAND_STORES__);
-      for (var i = 0; i < entries.length; i++) {
-        var name = entries[i][0], store = entries[i][1];
+      var keys = Object.keys(globalThis.__ZUSTAND_STORES__);
+      for (var i = 0; i < keys.length; i++) {
+        var name = keys[i];
+        var store = globalThis.__ZUSTAND_STORES__[name];
         result[name] = typeof store.getState === 'function' ? store.getState() : store;
       }
       state = result;
@@ -219,9 +223,7 @@ export const INJECTED_HELPERS = `
 
         function findStore(fiber) {
           if (!fiber) return null;
-          if (fiber.type && fiber.type.displayName === 'Provider' &&
-              fiber.memoizedProps && fiber.memoizedProps.store &&
-              fiber.memoizedProps.store.getState) {
+          if (fiber.type && fiber.type.displayName === 'Provider' && fiber.memoizedProps && fiber.memoizedProps.store && fiber.memoizedProps.store.getState) {
             return { store: fiber.memoizedProps.store.getState(), type: 'redux' };
           }
           return findStore(fiber.child) || findStore(fiber.sibling);
@@ -255,6 +257,7 @@ export const INJECTED_HELPERS = `
     return safeStringify({ type: storeType, state: state }, 30000);
   }
 
+  // Error Tracking
   var errors = [];
 
   try {
@@ -290,6 +293,7 @@ export const INJECTED_HELPERS = `
   function getErrors() { return JSON.stringify(errors); }
   function clearErrors() { errors.length = 0; return 'cleared'; }
 
+  // Public API
   globalThis.__RN_AGENT = {
     getTree: getTree,
     getNavState: getNavState,
@@ -302,14 +306,13 @@ export const INJECTED_HELPERS = `
     },
     getAppInfo: function() {
       try {
-        var RN = require('react-native');
         return JSON.stringify({
           __DEV__: typeof __DEV__ !== 'undefined' ? __DEV__ : null,
-          platform: RN.Platform.OS,
-          version: RN.Platform.Version,
+          platform: require('react-native').Platform.OS,
+          version: require('react-native').Platform.Version,
           rnVersion: require('react-native/Libraries/Core/ReactNativeVersion').version,
           hermes: typeof HermesInternal !== 'undefined',
-          dimensions: RN.Dimensions.get('window')
+          dimensions: require('react-native').Dimensions.get('window')
         });
       } catch(e) {
         return JSON.stringify({ error: e.message });
@@ -321,63 +324,66 @@ export const INJECTED_HELPERS = `
 
 export const NETWORK_HOOK_SCRIPT = `
 (function() {
-  if (globalThis.__RN_AGENT_NETWORK_HOOKED__) return;
-  globalThis.__RN_AGENT_NETWORK_HOOKED__ = true;
-  globalThis.__RN_AGENT_NETWORK_LOG__ = [];
-  var MAX = 100;
+  if (globalThis.__RN_AGENT_NETWORK_HOOK__) return;
+  globalThis.__RN_AGENT_NETWORK_HOOK__ = true;
 
   var origFetch = globalThis.fetch;
   globalThis.fetch = function(url, opts) {
-    var entry = {
-      id: 'f-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-      method: (opts && opts.method) || 'GET',
-      url: typeof url === 'string' ? url : (url && url.url) || String(url),
-      timestamp: new Date().toISOString()
-    };
-    globalThis.__RN_AGENT_NETWORK_LOG__.push(entry);
-    if (globalThis.__RN_AGENT_NETWORK_LOG__.length > MAX) {
-      globalThis.__RN_AGENT_NETWORK_LOG__.shift();
-    }
+    var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    var method = (opts && opts.method) || 'GET';
     var start = Date.now();
-    return origFetch.apply(this, arguments).then(function(resp) {
-      entry.status = resp.status;
-      entry.duration_ms = Date.now() - start;
-      return resp;
+
+    if (globalThis.__RN_AGENT_NETWORK_CB__) {
+      globalThis.__RN_AGENT_NETWORK_CB__('request', { id: id, method: method, url: String(url) });
+    }
+
+    return origFetch.apply(this, arguments).then(function(response) {
+      if (globalThis.__RN_AGENT_NETWORK_CB__) {
+        globalThis.__RN_AGENT_NETWORK_CB__('response', {
+          id: id, status: response.status, duration_ms: Date.now() - start
+        });
+      }
+      return response;
     }).catch(function(err) {
-      entry.status = 0;
-      entry.error = err.message;
-      entry.duration_ms = Date.now() - start;
+      if (globalThis.__RN_AGENT_NETWORK_CB__) {
+        globalThis.__RN_AGENT_NETWORK_CB__('response', {
+          id: id, status: 0, duration_ms: Date.now() - start
+        });
+      }
       throw err;
     });
   };
 
-  var XHR = globalThis.XMLHttpRequest;
-  if (XHR) {
-    var origOpen = XHR.prototype.open;
-    var origSend = XHR.prototype.send;
-    XHR.prototype.open = function(method, url) {
-      this.__rn_agent = { method: method, url: url };
+  var OrigXHR = globalThis.XMLHttpRequest;
+  if (OrigXHR) {
+    var origOpen = OrigXHR.prototype.open;
+    var origSend = OrigXHR.prototype.send;
+
+    OrigXHR.prototype.open = function(method, url) {
+      this.__rn_agent_method = method;
+      this.__rn_agent_url = url;
       return origOpen.apply(this, arguments);
     };
-    XHR.prototype.send = function() {
-      if (this.__rn_agent) {
-        var entry = {
-          id: 'x-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-          method: this.__rn_agent.method,
-          url: this.__rn_agent.url,
-          timestamp: new Date().toISOString()
-        };
-        globalThis.__RN_AGENT_NETWORK_LOG__.push(entry);
-        if (globalThis.__RN_AGENT_NETWORK_LOG__.length > MAX) {
-          globalThis.__RN_AGENT_NETWORK_LOG__.shift();
-        }
-        var start = Date.now();
-        var self = this;
-        this.addEventListener('loadend', function() {
-          entry.status = self.status;
-          entry.duration_ms = Date.now() - start;
+
+    OrigXHR.prototype.send = function() {
+      var self = this;
+      var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      var start = Date.now();
+
+      if (globalThis.__RN_AGENT_NETWORK_CB__) {
+        globalThis.__RN_AGENT_NETWORK_CB__('request', {
+          id: id, method: self.__rn_agent_method || 'GET', url: String(self.__rn_agent_url || '')
         });
       }
+
+      self.addEventListener('loadend', function() {
+        if (globalThis.__RN_AGENT_NETWORK_CB__) {
+          globalThis.__RN_AGENT_NETWORK_CB__('response', {
+            id: id, status: self.status, duration_ms: Date.now() - start
+          });
+        }
+      });
+
       return origSend.apply(this, arguments);
     };
   }

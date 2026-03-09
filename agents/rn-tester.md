@@ -19,17 +19,20 @@ implemented, you verify it works correctly on a real simulator/emulator.
 ### Step 0: Environment Check
 Call `cdp_status`. If not connected, it auto-connects.
 STOP if:
-- Metro not running → tell user: "Start Metro with `npx expo start`"
-- App has RedBox → read error with `cdp_error_log`, fix it first
-- Debugger paused → `cdp_dev_settings` action=reload
+- Metro not running -> tell user: "Start Metro with `npx expo start`"
+- App has RedBox -> read error with `cdp_error_log`, fix it first
+- Debugger paused -> `cdp_reload` to recover
 
 ### Step 1: Understand the Feature
-Read the source code files that were changed. Identify:
+Discover what changed using `git diff HEAD~1 --name-only` or `git diff --staged --name-only`.
+Read those source files. Identify:
 - What screens/components were added or modified
 - What testIDs exist (grep for `testID=`)
 - What store slices are involved
 - What API endpoints are called
 - What navigation routes are used
+- The app's bundle ID (from `app.json`, `app.config.js`, or `android/app/build.gradle`)
+- The app's URI scheme (from `app.json` or native config)
 
 ### Step 2: Plan the Test
 Write a brief test plan BEFORE executing:
@@ -65,7 +68,13 @@ For EACH step in the flow:
 2. **Wait for settle**: Maestro's assertVisible handles this.
    If no assertion target, add `sleep 0.5` before CDP queries.
 
-3. **Verify UI**: Take screenshot via bash, then query the specific component:
+3. **Verify UI**: Take screenshot, then query the specific component:
+   ```bash
+   # iOS
+   xcrun simctl io booted screenshot --type=jpeg /tmp/rn-screenshot.jpg
+   # Android
+   adb exec-out screencap -p > /tmp/rn-screenshot.png
+   ```
    ```
    cdp_component_tree(filter="CartBadge", depth=2)
    ```
@@ -77,7 +86,7 @@ For EACH step in the flow:
    cdp_network_log(limit=1, filter="/api/cart")
    ```
 
-5. **Decide**: If all match → next step. If mismatch → investigate.
+5. **Decide**: If all match -> next step. If mismatch -> investigate.
 
 ### Step 5: Edge Cases
 Test at minimum:
@@ -91,7 +100,7 @@ After all steps pass, write a complete Maestro YAML flow file at
 `flows/<feature-name>.yaml` that can run in CI.
 
 ### Step 7: Report
-Summarize with evidence:
+Summarize:
 - Steps that passed (with evidence)
 - Steps that failed (with screenshot + state dump)
 - Maestro test file generated at: flows/<name>.yaml
@@ -99,24 +108,25 @@ Summarize with evidence:
 ## Critical Rules
 
 1. **Scoped tree queries**: NEVER call cdp_component_tree without a
-   filter. Full tree dumps waste 10K+ tokens.
+   filter. Full tree dumps waste 10K+ tokens. Always scope to the
+   component you're checking.
 
 2. **Maestro assertVisible before CDP**: After any tap/interaction,
    always wait for Maestro's assertVisible to confirm the UI settled
-   before querying CDP state.
+   before querying CDP state. The React render cycle needs time.
 
 3. **Native errors are invisible to CDP**: If cdp_error_log is empty
    but the app crashed, run:
-    - Android: `adb logcat -s ReactNative:E ReactNativeJS:E`
-    - iOS: `xcrun simctl spawn booted log stream --predicate 'processImagePath contains "App"' --level error`
+    - Android: `adb logcat -s ReactNative:E ReactNativeJS:E --pid=$(adb shell pidof -s com.example.app)`
+    - iOS: `xcrun simctl spawn booted log stream --predicate 'processImagePath contains "YourApp" AND logType == error'`
 
 4. **Fiber tree != screen**: A component in the fiber tree may be
-   off-screen. Use Maestro's `assertVisible` for screen checks, CDP
-   for data checks.
+   off-screen, behind a modal, or invisible. Use Maestro's
+   assertVisible for screen-level checks, CDP for data-level checks.
 
-5. **One CDP session**: If cdp_connect fails with "1006", ask the user
+5. **One CDP session**: If cdp_status fails with "1006", ask the user
    to close React Native DevTools, Flipper, or Chrome DevTools.
 
-6. **After code changes**: Wait for Fast Refresh. Hot reload is
-   automatic when Claude Code saves a file. Wait 1-2s or call
-   cdp_reload if needed.
+6. **After code changes**: Wait for Fast Refresh before testing.
+   Hot reload is automatic when Claude Code saves a file. Wait 1-2s
+   or call cdp_reload if needed.

@@ -1,30 +1,38 @@
 ---
-name: check-env
-description: Check if the React Native development environment is ready for testing
+command: check-env
+description: Check that the React Native development environment is ready for testing -- Metro running, app loaded, CDP connected, no active errors.
 ---
 
-Check the environment readiness for React Native testing:
+Check the full environment status before testing or debugging.
 
-1. **Metro bundler**: Is it running?
-   ```bash
-   curl -s http://localhost:8081/status 2>/dev/null || curl -s http://localhost:8082/status 2>/dev/null || echo "Metro not running"
-   ```
+## Usage
 
-2. **Simulator/Emulator**: Is one booted?
-   ```bash
-   xcrun simctl list devices booted 2>/dev/null
-   adb devices 2>/dev/null
-   ```
+```
+/rn-dev-agent:check-env
+```
 
-3. **Test runner**: Is Maestro or maestro-runner available?
-   ```bash
-   command -v maestro-runner || command -v maestro || echo "No test runner found"
-   ```
+## What This Does
 
-4. **CDP connection**: Can we connect to the app?
-   Call `cdp_status` to verify end-to-end connectivity.
+Runs a single `cdp_status` call and reports on:
 
-5. **App state**: Is the app loaded without errors?
-   Check for RedBox, paused debugger, and error count.
+- **Metro**: Is the dev server running? Which port?
+- **CDP**: Is the bridge connected to Hermes? Which device/page?
+- **App**: Platform (iOS/Android), RN version, Hermes enabled, screen dimensions
+- **Capabilities**: Is CDP Network domain available? Is fiber tree accessible?
+- **Errors**: Active error count, RedBox showing, debugger paused?
 
-Report the status of each check and suggest fixes for any failures.
+## Common Issues and Fixes
+
+| Status | Meaning | Fix |
+|--------|---------|-----|
+| Metro not found | Dev server isn't running | `npx expo start` or `npx react-native start` |
+| No Hermes target | App isn't loaded or not using Hermes | Open the app on the simulator |
+| CDP code 1006 | Another debugger has the session | Close React Native DevTools, Flipper, Chrome DevTools |
+| hasRedBox: true | App is showing an error | Run `/rn-dev-agent:debug-screen` |
+| isPaused: true | Debugger paused on breakpoint | Remove `debugger;` statements or use `cdp_reload` |
+| fiberTree: false | Release build or non-Hermes engine | Only works in `__DEV__` builds with Hermes |
+
+## Use This Before Every Test Session
+
+Run `check-env` to confirm the environment is clean before starting a
+`test-feature` or `debug-screen` session.

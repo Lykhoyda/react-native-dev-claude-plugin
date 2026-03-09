@@ -1,391 +1,446 @@
-import WebSocket from "ws";
-import { RingBuffer } from "./ring-buffer.js";
-import type { NetworkEntry, ConsoleEntry, CDPTarget, CDPResponse } from "./types.js";
-import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from "./injected-helpers.js";
+import WebSocket from 'ws';
+import { RingBuffer } from './ring-buffer.js';
+import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from './injected-helpers.js';
+import type {
+  CDPMessage,
+  PendingCall,
+  HermesTarget,
+  ConsoleEntry,
+  NetworkEntry,
+  CDPClientState,
+  EvaluateResult,
+} from './types.js';
 
-const DISCOVERY_PORTS = [8081, 8082, 19000, 19006];
 const CDP_TIMEOUT_MS = 5000;
-const RECONNECT_DELAY_MS = 1500;
-const MAX_CONNECT_RETRIES = 5;
-const RETRY_DELAY_MS = 2000;
 const REACT_READY_TIMEOUT_MS = 8000;
-
-type EventHandler = (params: Record<string, unknown>) => void;
+const RECONNECT_DELAY_MS = 1500;
+const RECONNECT_ATTEMPTS = 10;
+const RECONNECT_RETRY_MS = 1000;
+const DISCOVERY_TIMEOUT_MS = 1500;
+const DEFAULT_PORTS = [8081, 8082, 19000, 19006];
 
 export class CDPClient {
   private ws: WebSocket | null = null;
   private msgId = 0;
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
-  private eventHandlers = new Map<string, EventHandler[]>();
-  readonly networkBuffer: RingBuffer<NetworkEntry>;
-  readonly consoleBuffer: RingBuffer<ConsoleEntry>;
-  private port: number;
+  private pending = new Map<number, PendingCall>();
+  private eventHandlers = new Map<string, (params: unknown) => void>();
+  private _consoleBuffer: RingBuffer<ConsoleEntry>;
+  private _networkBuffer: RingBuffer<NetworkEntry>;
+  private _port: number;
   private reconnecting = false;
-  isPaused = false;
-  hasRedBox = false;
-  helpersInjected = false;
-  networkMode: "cdp" | "hook" | "none" = "none";
-  private targetTitle = "";
-  private targetId = "";
+  private disposed = false;
+  private _helpersInjected = false;
+  private _networkMode: 'cdp' | 'hook' | 'none' = 'none';
+  private _isPaused = false;
+  private _connectedTarget: HermesTarget | null = null;
+  private _state: CDPClientState = 'disconnected';
+  private _connectionGeneration = 0;
 
   constructor(port?: number) {
-    this.port = port || 8081;
-    this.networkBuffer = new RingBuffer(100);
-    this.consoleBuffer = new RingBuffer(200);
+    this._port = port ?? 8081;
+    this._consoleBuffer = new RingBuffer<ConsoleEntry>(200);
+    this._networkBuffer = new RingBuffer<NetworkEntry>(100);
   }
 
-  get connected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
-  }
+  get state(): CDPClientState { return this._state; }
+  get isConnected(): boolean { return this._state === 'connected' && this.ws?.readyState === WebSocket.OPEN; }
+  get isPaused(): boolean { return this._isPaused; }
+  get helpersInjected(): boolean { return this._helpersInjected; }
+  get metroPort(): number { return this._port; }
+  get connectedTarget(): HermesTarget | null { return this._connectedTarget; }
+  get networkMode(): 'cdp' | 'hook' | 'none' { return this._networkMode; }
+  get consoleBuffer(): RingBuffer<ConsoleEntry> { return this._consoleBuffer; }
+  get networkBuffer(): RingBuffer<NetworkEntry> { return this._networkBuffer; }
+  get connectionGeneration(): number { return this._connectionGeneration; }
 
-  get currentPort(): number {
-    return this.port;
-  }
+  async autoConnect(portHint?: number): Promise<string> {
+    if (this._state === 'connecting') {
+      throw new Error('Already connecting to Metro...');
+    }
+    if (this.disposed) {
+      throw new Error('Client is disposed. Create a new CDPClient instance.');
+    }
 
-  get deviceName(): string {
-    return this.targetTitle;
-  }
+    if (portHint) this._port = portHint;
+    this._state = 'connecting';
 
-  get pageId(): string {
-    return this.targetId;
-  }
+    const ports = [...new Set([this._port, ...DEFAULT_PORTS])];
+    let metroPort: number | null = null;
 
-  async autoConnect(): Promise<string> {
-    const metroPort = await this.findMetro();
-    this.port = metroPort;
+    for (const p of ports) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), DISCOVERY_TIMEOUT_MS);
+      try {
+        const resp = await fetch(`http://127.0.0.1:${p}/status`, { signal: ctrl.signal });
+        const text = await resp.text();
+        if (text.includes('packager-status:running')) {
+          metroPort = p;
+          break;
+        }
+      } catch {
+        // Port not available, continue scanning
+      } finally {
+        clearTimeout(timer);
+      }
+    }
 
-    const targets = await this.discoverTargets(metroPort);
-    const target = this.pickBestTarget(targets);
+    if (!metroPort) {
+      this._state = 'disconnected';
+      throw new Error(
+        'Metro not found on ports ' + ports.join(', ') +
+        '. Is the dev server running? Try: npx expo start or npx react-native start'
+      );
+    }
+    this._port = metroPort;
+
+    const targetsResp = await fetch(`http://127.0.0.1:${metroPort}/json/list`);
+    const targets = (await targetsResp.json()) as HermesTarget[];
+
+    const validTargets = targets
+      .filter(t => t.vm === 'Hermes' && !t.title?.includes('Experimental'))
+      .map(t => ({
+        ...t,
+        webSocketDebuggerUrl: t.webSocketDebuggerUrl
+          ?.replace(/\[::1\]/g, '127.0.0.1')
+          ?.replace(/\[::\]/g, '127.0.0.1'),
+      }));
+
+    if (validTargets.length === 0) {
+      this._state = 'disconnected';
+      throw new Error(
+        'No Hermes debug target found. Is the app running? Is Hermes enabled?'
+      );
+    }
+
+    const target = validTargets.reduce((a, b) => {
+      const aPage = parseInt(a.id?.split('-')[1] ?? '0', 10);
+      const bPage = parseInt(b.id?.split('-')[1] ?? '0', 10);
+      return bPage > aPage ? b : a;
+    });
 
     await this.connectToTarget(target);
+    this._connectionGeneration++;
     return `Connected to ${target.title} on port ${metroPort}`;
   }
 
-  private async findMetro(): Promise<number> {
-    const ports = [...new Set([this.port, ...DISCOVERY_PORTS])];
+  async disconnect(): Promise<void> {
+    this.disposed = true;
+    this._state = 'disconnected';
+    this._helpersInjected = false;
+    this._connectedTarget = null;
 
-    for (const p of ports) {
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 1500);
-        const resp = await fetch(`http://127.0.0.1:${p}/status`, { signal: ctrl.signal });
-        clearTimeout(timer);
-        const text = await resp.text();
-        if (text.includes("packager-status:running")) return p;
-      } catch {
-        // Port not available
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close();
       }
+      this.ws = null;
     }
 
-    throw new Error(
-      "Metro not found on ports " + ports.join(", ") + ". Is the dev server running? Try: npx expo start or npx react-native start"
-    );
+    this.rejectAllPending(new Error('Client disconnected'));
   }
 
-  private async discoverTargets(port: number): Promise<CDPTarget[]> {
-    const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
-    const targets = (await resp.json()) as CDPTarget[];
+  async evaluate(expression: string, awaitPromise = false): Promise<EvaluateResult> {
+    const result = await this.sendWithTimeout('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise,
+    }, CDP_TIMEOUT_MS) as { result?: { value?: unknown }; exceptionDetails?: { text?: string; exception?: { description?: string } } };
 
-    const valid = targets
-      .filter((t) => t.vm === "Hermes" && !t.title?.includes("Experimental"))
-      .map((t) => ({
-        ...t,
-        webSocketDebuggerUrl: t.webSocketDebuggerUrl
-          ?.replace(/\[::1\]/g, "127.0.0.1")
-          ?.replace(/\[::\]/g, "127.0.0.1"),
-      }));
-
-    if (valid.length === 0) {
-      throw new Error("No Hermes debug target found. Is the app running? Is Hermes enabled?");
+    if (result?.exceptionDetails) {
+      return {
+        error: result.exceptionDetails.text ??
+          result.exceptionDetails.exception?.description ??
+          'Unknown evaluation error',
+      };
     }
-
-    return valid;
+    return { value: result?.result?.value };
   }
 
-  private pickBestTarget(targets: CDPTarget[]): CDPTarget {
-    return targets.reduce((a, b) => {
-      const aPage = parseInt(a.id?.split("-")[1] || "0", 10);
-      const bPage = parseInt(b.id?.split("-")[1] || "0", 10);
-      return bPage > aPage ? b : a;
-    });
+  async send(method: string, params?: unknown): Promise<unknown> {
+    return this.sendWithTimeout(method, params, CDP_TIMEOUT_MS);
   }
 
-  private async connectToTarget(target: CDPTarget): Promise<void> {
-    for (let i = 0; i < MAX_CONNECT_RETRIES; i++) {
+  private async connectToTarget(target: HermesTarget, retries = 5): Promise<void> {
+    for (let i = 0; i < retries; i++) {
+      if (this.disposed) throw new Error('Client disposed during connection');
       try {
-        await this.openWebSocket(target.webSocketDebuggerUrl);
-        this.targetTitle = target.title;
-        this.targetId = target.id;
+        await this.connectWs(target.webSocketDebuggerUrl);
+        this._connectedTarget = target;
         await this.setup();
         return;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("1006") || msg.includes("refused")) {
+        if (err instanceof Error && (err.message.includes('1006') || err.message.includes('refused'))) {
+          this._state = 'disconnected';
           throw new Error(
-            "CDP connection rejected (code 1006). Another debugger may be connected. " +
-            "Close React Native DevTools, Flipper, or Chrome DevTools and try again."
+            'CDP connection rejected (code 1006). Another debugger may be connected. ' +
+            'Close React Native DevTools, Flipper, or Chrome DevTools and try again.'
           );
         }
-        if (i < MAX_CONNECT_RETRIES - 1) await sleep(RETRY_DELAY_MS);
+        if (i < retries - 1) await this.sleep(2000);
       }
     }
-    throw new Error(`Failed to connect after ${MAX_CONNECT_RETRIES} attempts`);
+    this._state = 'disconnected';
+    throw new Error(`Failed to connect after ${retries} attempts`);
   }
 
-  private openWebSocket(url: string): Promise<void> {
+  private connectWs(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url);
-      const timeout = setTimeout(() => {
-        ws.close();
-        reject(new Error("WebSocket connection timeout"));
-      }, CDP_TIMEOUT_MS);
+      let settled = false;
 
-      ws.on("open", () => {
-        clearTimeout(timeout);
+      ws.on('open', () => {
+        settled = true;
         this.ws = ws;
-        this.setupMessageHandler();
+        this._state = 'connected';
         resolve();
       });
 
-      ws.on("error", (err) => {
-        clearTimeout(timeout);
-        reject(err);
+      ws.on('error', (err) => {
+        if (!settled) {
+          settled = true;
+          reject(err);
+        } else {
+          console.error('CDP WebSocket error:', err instanceof Error ? err.message : err);
+        }
+      });
+
+      ws.on('message', (data) => {
+        this.handleMessage(data);
+      });
+
+      ws.on('close', (code) => {
+        if (!settled) {
+          settled = true;
+          reject(new Error(`WebSocket closed before connecting: ${code}`));
+          return;
+        }
+        if (this.ws === ws) {
+          this.rejectAllPending(new Error(`WebSocket closed: ${code}`));
+          this.handleClose(code);
+        }
       });
     });
   }
 
-  private setupMessageHandler(): void {
-    this.ws?.on("message", (data) => {
-      const msg = JSON.parse(data.toString()) as CDPResponse;
-
+  private handleMessage(data: WebSocket.RawData): void {
+    try {
+      const msg = JSON.parse(data.toString()) as CDPMessage;
       if (msg.id !== undefined && this.pending.has(msg.id)) {
-        const p = this.pending.get(msg.id)!;
-        clearTimeout(p.timer);
+        const pending = this.pending.get(msg.id)!;
+        clearTimeout(pending.timer);
         this.pending.delete(msg.id);
         if (msg.error) {
-          p.reject(new Error(msg.error.message));
+          pending.reject(new Error(msg.error.message));
         } else {
-          p.resolve(msg.result);
+          pending.resolve(msg);
         }
-      }
+      } else if (msg.method) {
+        const handler = this.eventHandlers.get(msg.method);
+        if (handler) handler(msg.params);
 
-      if (msg.method) {
-        const handlers = this.eventHandlers.get(msg.method);
-        if (handlers) {
-          for (const handler of handlers) {
-            handler(msg.params ?? {});
-          }
+        if (msg.method === 'Runtime.consoleAPICalled') {
+          this.parseNetworkHookMessage(msg.params);
         }
       }
-    });
+    } catch {
+      // Malformed message, ignore
+    }
   }
 
-  private onEvent(method: string, handler: EventHandler): void {
-    const existing = this.eventHandlers.get(method) ?? [];
-    existing.push(handler);
-    this.eventHandlers.set(method, existing);
+  private parseNetworkHookMessage(params: unknown): void {
+    if (this._networkMode !== 'hook') return;
+    const p = params as { args?: Array<{ value?: unknown }> };
+    const firstArg = p.args?.[0]?.value;
+    if (typeof firstArg !== 'string' || !firstArg.startsWith('__RN_NET__:')) return;
+
+    try {
+      const parts = firstArg.split(':');
+      const type = parts[1];
+      const data = JSON.parse(parts.slice(2).join(':'));
+
+      if (type === 'request') {
+        this._networkBuffer.push({
+          id: data.id,
+          method: data.method ?? 'GET',
+          url: data.url ?? '',
+          timestamp: new Date().toISOString(),
+        });
+      } else if (type === 'response') {
+        const entry = this._networkBuffer.findLast(e => e.id === data.id);
+        if (entry) {
+          entry.status = data.status;
+          entry.duration_ms = data.duration_ms;
+        }
+      }
+    } catch {
+      // Malformed hook message, ignore
+    }
   }
 
   private async setup(): Promise<void> {
-    await this.send("Runtime.enable");
-    await this.send("Debugger.enable");
+    await this.sendWithTimeout('Runtime.enable', undefined, CDP_TIMEOUT_MS);
+    await this.sendWithTimeout('Debugger.enable', undefined, CDP_TIMEOUT_MS);
 
     try {
-      await this.send("Network.enable");
-      this.networkMode = "cdp";
+      await this.sendWithTimeout('Network.enable', undefined, CDP_TIMEOUT_MS);
+      this._networkMode = 'cdp';
     } catch {
-      this.networkMode = "none";
+      this._networkMode = 'none';
     }
 
+    this.eventHandlers.clear();
     this.setupEventHandlers();
-    await this.waitForReact();
-    await this.injectHelpers();
 
-    if (this.networkMode === "none") {
-      await this.injectNetworkHooks();
-      this.networkMode = "hook";
+    await this.waitForReact(REACT_READY_TIMEOUT_MS);
+
+    const helperResult = await this.evaluate(INJECTED_HELPERS);
+    if (helperResult.error) {
+      console.error('CDP: failed to inject helpers:', helperResult.error);
     }
 
-    this.setupReconnect();
-    this.helpersInjected = true;
+    if (this._networkMode === 'none') {
+      const hookResult = await this.evaluate(NETWORK_HOOK_SCRIPT);
+      if (hookResult.error) {
+        console.error('CDP: failed to inject network hooks:', hookResult.error);
+      } else {
+        await this.evaluate(`
+          globalThis.__RN_AGENT_NETWORK_CB__ = function(type, data) {
+            console.log('__RN_NET__:' + type + ':' + JSON.stringify(data));
+          };
+        `);
+        this._networkMode = 'hook';
+      }
+    }
+
+    this._helpersInjected = true;
   }
 
   private setupEventHandlers(): void {
-    this.onEvent("Runtime.consoleAPICalled", (params) => {
-      const args = params.args as Array<{ value?: unknown; description?: string }> | undefined;
-      this.consoleBuffer.push({
-        level: params.type as string,
-        text: args?.map((a) => a.value ?? a.description ?? "").join(" ") ?? "",
+    this.eventHandlers.set('Runtime.consoleAPICalled', (params: unknown) => {
+      const p = params as { type: string; args?: Array<{ value?: unknown; description?: string }> };
+      this._consoleBuffer.push({
+        level: p.type,
+        text: p.args?.map(a => a.value ?? a.description ?? '').join(' ') ?? '',
         timestamp: new Date().toISOString(),
       });
     });
 
-    this.onEvent("Network.requestWillBeSent", (params) => {
-      const request = params.request as { method?: string; url?: string } | undefined;
-      this.networkBuffer.push({
-        id: params.requestId as string,
-        method: request?.method ?? "GET",
-        url: request?.url ?? "",
+    this.eventHandlers.set('Network.requestWillBeSent', (params: unknown) => {
+      const p = params as { requestId: string; request?: { method: string; url: string } };
+      this._networkBuffer.push({
+        id: p.requestId,
+        method: p.request?.method ?? 'GET',
+        url: p.request?.url ?? '',
         timestamp: new Date().toISOString(),
       });
     });
 
-    this.onEvent("Network.responseReceived", (params) => {
-      const entry = this.networkBuffer.findLast((e) => e.id === (params.requestId as string));
+    this.eventHandlers.set('Network.responseReceived', (params: unknown) => {
+      const p = params as { requestId: string; response?: { status: number } };
+      const entry = this._networkBuffer.findLast(e => e.id === p.requestId);
       if (entry) {
-        const response = params.response as { status?: number } | undefined;
-        entry.status = response?.status;
+        entry.status = p.response?.status;
         entry.duration_ms = Date.now() - new Date(entry.timestamp).getTime();
       }
     });
 
-    this.onEvent("Debugger.paused", async () => {
-      this.isPaused = true;
+    this.eventHandlers.set('Debugger.paused', async () => {
+      this._isPaused = true;
       try {
-        await this.send("Debugger.resume");
+        await this.sendWithTimeout('Debugger.resume', undefined, CDP_TIMEOUT_MS);
       } catch {
-        // Ignore resume errors
+        // Best effort auto-resume
       }
-      this.isPaused = false;
+      this._isPaused = false;
     });
   }
 
-  private async waitForReact(): Promise<void> {
+  private async waitForReact(timeout: number): Promise<void> {
     const start = Date.now();
-    while (Date.now() - start < REACT_READY_TIMEOUT_MS) {
+    while (Date.now() - start < timeout) {
       try {
         const result = await this.evaluate(
-          'typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== "undefined" && __REACT_DEVTOOLS_GLOBAL_HOOK__.renderers?.size > 0'
+          'typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== "undefined" && ' +
+          '__REACT_DEVTOOLS_GLOBAL_HOOK__.renderers?.size > 0'
         );
-        if (result === true) return;
+        if (result.value === true) return;
       } catch {
         // Not ready yet
       }
-      await sleep(500);
+      await this.sleep(500);
     }
   }
 
-  private async injectHelpers(): Promise<void> {
-    await this.evaluate(INJECTED_HELPERS);
-  }
+  private handleClose(code: number): void {
+    this._state = 'disconnected';
+    this._helpersInjected = false;
 
-  private async injectNetworkHooks(): Promise<void> {
-    await this.evaluate(NETWORK_HOOK_SCRIPT);
-  }
+    if (this.disposed || this.reconnecting) return;
 
-  private rejectAllPending(): void {
-    for (const [, p] of this.pending) {
-      clearTimeout(p.timer);
-      p.reject(new Error("WebSocket closed"));
+    if (code === 1006) {
+      console.error('CDP: abnormal close (1006). App may have reloaded or crashed. Attempting reconnect...');
+    } else {
+      console.error('CDP: connection closed (code ' + code + '). Reconnecting...');
     }
-    this.pending.clear();
-  }
 
-  private setupReconnect(): void {
-    this.ws?.on("close", async (code) => {
-      this.rejectAllPending();
+    this.reconnecting = true;
+    this._state = 'reconnecting';
 
-      if (this.reconnecting) return;
-      this.reconnecting = true;
-      this.helpersInjected = false;
-
-      console.error("CDP: connection closed (reload). Reconnecting...");
-      await sleep(RECONNECT_DELAY_MS);
-
-      for (let i = 0; i < 10; i++) {
-        try {
-          await this.autoConnect();
-          console.error("CDP: reconnected successfully");
-          this.reconnecting = false;
-          return;
-        } catch {
-          await sleep(1000);
-        }
-      }
+    this.reconnect().catch((err) => {
+      console.error('CDP: reconnect failed:', err instanceof Error ? err.message : err);
+    }).finally(() => {
       this.reconnecting = false;
     });
   }
 
-  async evaluate(expression: string, awaitPromise = false): Promise<unknown> {
-    const result = (await this.sendWithTimeout("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise,
-    })) as {
-      result?: { value?: unknown };
-      exceptionDetails?: { text?: string; exception?: { description?: string } };
-    } | undefined;
+  private async reconnect(): Promise<void> {
+    await this.sleep(RECONNECT_DELAY_MS);
 
-    if (result?.exceptionDetails) {
-      return {
-        error: result.exceptionDetails.text || result.exceptionDetails.exception?.description || "Unknown error",
-      };
+    for (let i = 0; i < RECONNECT_ATTEMPTS; i++) {
+      if (this.disposed) return;
+      try {
+        await this.autoConnect();
+        console.error('CDP: reconnected successfully');
+        return;
+      } catch {
+        if (i < RECONNECT_ATTEMPTS - 1) {
+          await this.sleep(RECONNECT_RETRY_MS);
+        }
+      }
     }
-    return result?.result?.value;
+    this._state = 'disconnected';
+    console.error('CDP: reconnect failed after ' + RECONNECT_ATTEMPTS + ' attempts');
   }
 
-  send(method: string, params?: Record<string, unknown>): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        reject(new Error("CDP not connected"));
-        return;
-      }
+  private rejectAllPending(reason: Error): void {
+    for (const { reject, timer } of this.pending.values()) {
+      clearTimeout(timer);
+      reject(reason);
+    }
+    this.pending.clear();
+  }
 
+  private sendWithTimeout(method: string, params: unknown, ms: number): Promise<unknown> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('WebSocket not connected'));
+    }
+
+    return new Promise((resolve, reject) => {
       const id = ++this.msgId;
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`CDP timeout (${CDP_TIMEOUT_MS}ms): ${method}`));
-      }, CDP_TIMEOUT_MS);
+        reject(new Error(
+          `CDP timeout (${ms}ms): ${method}. JS thread may be blocked, paused on a breakpoint, or waiting on an unresolved promise.`
+        ));
+      }, ms);
 
-      this.pending.set(id, { resolve, reject, timer });
-      this.ws.send(JSON.stringify({ id, method, params }));
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+      this.ws!.send(JSON.stringify({ id, method, params }));
     });
   }
 
-  private sendWithTimeout(method: string, params: Record<string, unknown>): Promise<unknown> {
-    return this.send(method, params);
+  private sleep(ms: number): Promise<void> {
+    return new Promise(r => setTimeout(r, ms));
   }
-
-  async reload(full = false): Promise<string> {
-    if (full) {
-      try {
-        await this.evaluate('require("react-native/Libraries/Utilities/DevSettings").reload()');
-      } catch {
-        // Expected: WS closes during reload
-      }
-      await sleep(2000);
-      try {
-        await this.autoConnect();
-        return "Full reload complete, reconnected";
-      } catch (err) {
-        return `Full reload triggered but reconnect failed: ${err instanceof Error ? err.message : String(err)}`;
-      }
-    }
-
-    try {
-      await this.send("Runtime.evaluate", {
-        expression: 'require("react-native/Libraries/Utilities/DevSettings").reload()',
-        returnByValue: true,
-      });
-    } catch {
-      // Expected: WS may close during hot reload
-    }
-    return "Hot reload triggered";
-  }
-
-  disconnect(): void {
-    for (const [, p] of this.pending) {
-      clearTimeout(p.timer);
-      p.reject(new Error("Disconnected"));
-    }
-    this.pending.clear();
-    this.eventHandlers.clear();
-    this.ws?.close();
-    this.ws = null;
-    this.helpersInjected = false;
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
