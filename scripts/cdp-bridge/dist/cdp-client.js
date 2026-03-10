@@ -97,7 +97,16 @@ export class CDPClient {
             webSocketDebuggerUrl: t.webSocketDebuggerUrl
                 ?.replace(/\[::1\]/g, '127.0.0.1')
                 ?.replace(/\[::\]/g, '127.0.0.1'),
-        }));
+        }))
+            .filter(t => {
+            try {
+                const { hostname } = new URL(t.webSocketDebuggerUrl);
+                return hostname === '127.0.0.1' || hostname === 'localhost';
+            }
+            catch {
+                return false;
+            }
+        });
         if (validTargets.length === 0) {
             this._state = 'disconnected';
             throw new Error('No Hermes debug target found. Is the app running? Is Hermes enabled?');
@@ -168,7 +177,10 @@ export class CDPClient {
     }
     connectWs(url) {
         return new Promise((resolve, reject) => {
-            const ws = new WebSocket(url);
+            const ws = new WebSocket(url, {
+                handshakeTimeout: 5000,
+                maxPayload: 100 * 1024 * 1024,
+            });
             let settled = false;
             ws.on('open', () => {
                 settled = true;
@@ -204,6 +216,10 @@ export class CDPClient {
     handleMessage(data) {
         try {
             const msg = JSON.parse(data.toString());
+            if (typeof msg !== 'object' || msg === null || Array.isArray(msg)) {
+                console.error('CDP: unexpected message shape, ignoring');
+                return;
+            }
             if (msg.id !== undefined && this.pending.has(msg.id)) {
                 const pending = this.pending.get(msg.id);
                 clearTimeout(pending.timer);

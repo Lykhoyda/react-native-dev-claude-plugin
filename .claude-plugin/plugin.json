@@ -20,21 +20,21 @@
     "maestro"
   ],
   "skills": [
-    "skills/rn-device-control",
-    "skills/rn-testing",
-    "skills/rn-debugging"
+    "./skills/rn-device-control",
+    "./skills/rn-testing",
+    "./skills/rn-debugging"
   ],
   "agents": [
-    "agents/rn-tester.md",
-    "agents/rn-debugger.md"
+    "./agents/rn-tester.md",
+    "./agents/rn-debugger.md"
   ],
   "commands": [
-    "commands/test-feature.md",
-    "commands/debug-screen.md",
-    "commands/check-env.md",
-    "commands/build-and-test.md"
+    "./commands/test-feature.md",
+    "./commands/debug-screen.md",
+    "./commands/check-env.md",
+    "./commands/build-and-test.md"
   ],
-  "hooks": "hooks/hooks.json",
+  "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "rn-dev-agent-cdp": {
       "command": "node",

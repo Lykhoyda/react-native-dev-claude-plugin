@@ -21,7 +21,7 @@ const server = new McpServer({
     version: '0.1.0',
 });
 server.tool('cdp_status', 'Get full environment status. Auto-connects if not connected. Returns Metro status, CDP connection, app info, capabilities, active errors, and RedBox/paused state. Call this FIRST before any testing.', { metroPort: z.number().optional().describe('Override Metro port (default: auto-detect 8081/8082/19000/19006)') }, createStatusHandler(getClient, setClient, createClient));
-server.tool('cdp_evaluate', 'Execute arbitrary JavaScript in Hermes runtime. Has 5-second timeout. Use for one-off checks not covered by other tools. Prefer specific tools over raw evaluate.', {
+server.tool('cdp_evaluate', 'CAUTION: Executes arbitrary JavaScript directly in the Hermes runtime with no sandboxing. Use only when no specific tool covers the need. Has a 5-second timeout. Prefer cdp_component_tree, cdp_store_state, and other targeted tools over raw evaluate.', {
     expression: z.string().describe('JavaScript expression to evaluate'),
     awaitPromise: z.boolean().default(false).describe('Wait for promise resolution'),
 }, createEvaluateHandler(getClient));

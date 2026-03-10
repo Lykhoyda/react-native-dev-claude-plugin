@@ -35,7 +35,8 @@ START_METRO="true"
 METRO_PORTS=(8081 8082 19000 19006)
 METRO_TIMEOUT_S=30
 METRO_POLL_INTERVAL_S=2
-TMP_DIR="/tmp/rn-dev-agent"
+TMP_DIR=$(mktemp -d /tmp/rn-dev-agent.XXXXXX)
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 json_escape() {
   local s="$1"
@@ -70,6 +71,12 @@ while [[ $# -gt 0 ]]; do
     *) shift ;;
   esac
 done
+
+if [ -n "$BUNDLE_ID" ]; then
+  if ! [[ "$BUNDLE_ID" =~ ^[a-zA-Z][a-zA-Z0-9_.]*$ ]]; then
+    json_error 1 "Invalid bundle ID '$BUNDLE_ID': must match ^[a-zA-Z][a-zA-Z0-9_.]*$"
+  fi
+fi
 
 if [ -z "$PLATFORM" ] || { [ "$PLATFORM" != "ios" ] && [ "$PLATFORM" != "android" ]; }; then
   json_error 1 "Usage: expo_ensure_running.sh <ios|android> [--artifact <path>] [--bundle-id <id>]"
@@ -197,7 +204,19 @@ install_ios_artifact() {
   echo "Extracting iOS artifact: $artifact" >&2
 
   if [[ "$artifact" == *.tar.gz ]] || [[ "$artifact" == *.tgz ]]; then
+    local bad_entries
+    bad_entries=$(tar -tzf "$artifact" 2>/dev/null | grep -E '(^\.\.|/\.\.|^/)' || true)
+    if [ -n "$bad_entries" ]; then
+      json_error 3 "Artifact rejected: contains unsafe paths (path traversal or absolute): $artifact"
+    fi
     tar -xzf "$artifact" -C "$app_dir" 2>/dev/null || json_error 3 "Failed to extract .tar.gz: $artifact"
+    while IFS= read -r -d '' link; do
+      local target
+      target=$(readlink "$link")
+      if [[ "$target" == /* ]] || [[ "$target" == ../* ]] || [[ "$target" == */../* ]] || [[ "$target" == .. ]]; then
+        json_error 3 "Artifact rejected: symlink escapes extraction dir: $link -> $target"
+      fi
+    done < <(find "$app_dir" -type l -print0 2>/dev/null)
   elif [[ "$artifact" == *.app ]]; then
     cp -R "$artifact" "$app_dir/"
   else

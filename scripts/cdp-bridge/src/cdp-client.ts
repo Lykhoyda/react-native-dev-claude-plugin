@@ -114,7 +114,15 @@ export class CDPClient {
         webSocketDebuggerUrl: t.webSocketDebuggerUrl
           ?.replace(/\[::1\]/g, '127.0.0.1')
           ?.replace(/\[::\]/g, '127.0.0.1'),
-      }));
+      }))
+      .filter(t => {
+        try {
+          const { hostname } = new URL(t.webSocketDebuggerUrl!);
+          return hostname === '127.0.0.1' || hostname === 'localhost';
+        } catch {
+          return false;
+        }
+      });
 
     if (validTargets.length === 0) {
       this._state = 'disconnected';
@@ -197,7 +205,10 @@ export class CDPClient {
 
   private connectWs(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(url, {
+        handshakeTimeout: 5000,
+        maxPayload: 100 * 1024 * 1024,
+      });
       let settled = false;
 
       ws.on('open', () => {
@@ -237,6 +248,12 @@ export class CDPClient {
   private handleMessage(data: WebSocket.RawData): void {
     try {
       const msg = JSON.parse(data.toString()) as CDPMessage;
+
+      if (typeof msg !== 'object' || msg === null || Array.isArray(msg)) {
+        console.error('CDP: unexpected message shape, ignoring');
+        return;
+      }
+
       if (msg.id !== undefined && this.pending.has(msg.id)) {
         const pending = this.pending.get(msg.id)!;
         clearTimeout(pending.timer);

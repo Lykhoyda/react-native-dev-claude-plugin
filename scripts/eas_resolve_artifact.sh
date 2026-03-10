@@ -24,8 +24,20 @@ set -euo pipefail
 
 PLATFORM="${1:-}"
 PROFILE="${2:-}"
-OUTPUT_DIR="${3:-/tmp/rn-eas-builds}"
+OUTPUT_DIR="${3:-}"
+if [ -z "$OUTPUT_DIR" ]; then
+  OUTPUT_DIR=$(mktemp -d /tmp/rn-eas-builds.XXXXXX)
+  trap 'rm -rf "$OUTPUT_DIR"' EXIT
+fi
 CACHE_MAX_AGE_HOURS=24
+
+if [ -n "$PROFILE" ]; then
+  if ! [[ "$PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    printf '{"status":"error","code":1,"message":"Invalid profile name: must match ^[a-zA-Z0-9_-]+$"}\n' >&2
+    printf '{"status":"error","code":1,"message":"Invalid profile name: must match ^[a-zA-Z0-9_-]+$"}\n'
+    exit 1
+  fi
+fi
 
 json_escape() {
   local s="$1"
@@ -180,15 +192,15 @@ if $EAS_CMD build:list \
   --status finished \
   --limit 1 \
   --non-interactive \
-  --json > /tmp/rn-eas-build-info.json 2>/tmp/rn-eas-build-err.log; then
+  --json > "${OUTPUT_DIR}/build-info.json" 2>"${OUTPUT_DIR}/build-err.log"; then
 
   # Extract artifact URL and download
   local_build_url=""
   if command -v jq &>/dev/null; then
-    local_build_url=$(jq -r '.[0].artifacts.buildUrl // empty' /tmp/rn-eas-build-info.json 2>/dev/null || true)
+    local_build_url=$(jq -r '.[0].artifacts.buildUrl // empty' "${OUTPUT_DIR}/build-info.json" 2>/dev/null || true)
   elif command -v node &>/dev/null; then
     local_build_url=$(node -e "
-      const d = require('/tmp/rn-eas-build-info.json');
+      const d = require('${OUTPUT_DIR}/build-info.json');
       const url = d?.[0]?.artifacts?.buildUrl;
       if (url) console.log(url);
     " 2>/dev/null || true)

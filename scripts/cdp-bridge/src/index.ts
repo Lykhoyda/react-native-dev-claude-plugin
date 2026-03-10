@@ -33,7 +33,7 @@ server.tool(
 
 server.tool(
   'cdp_evaluate',
-  'Execute arbitrary JavaScript in Hermes runtime. Has 5-second timeout. Use for one-off checks not covered by other tools. Prefer specific tools over raw evaluate.',
+  'CAUTION: Executes arbitrary JavaScript directly in the Hermes runtime with no sandboxing. Use only when no specific tool covers the need. Has a 5-second timeout. Prefer cdp_component_tree, cdp_store_state, and other targeted tools over raw evaluate.',
   {
     expression: z.string().describe('JavaScript expression to evaluate'),
     awaitPromise: z.boolean().default(false).describe('Wait for promise resolution'),

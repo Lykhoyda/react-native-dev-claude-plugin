@@ -280,8 +280,8 @@ Relative paths like `scripts/cdp-bridge/dist/index.js` resolve against the user'
 ### D84: PID-suffixed temp file prevents concurrent snapshot race
 Hardcoded `/data/local/tmp/uidump.xml` could be overwritten by concurrent snapshot runs. Changed to `/data/local/tmp/uidump_$$.xml` (PID-suffixed) for uniqueness. Gemini MEDIUM #4.
 
-### D85: Marketplace JSON uses type instead of source for source kind
-`"source": "github"` was non-standard; changed to `"type": "github"` to match expected marketplace schema. Gemini MEDIUM #5.
+### D85: Marketplace JSON source field corrected to `source.source`
+The correct Claude Code marketplace schema uses `"source": "github"` inside the source object (i.e., `{"source": {"source": "github", "repo": "..."}}`), not `"type": "github"`. The previous `"type"` key was rejected by `claude plugin validate` on Claude Code 2.1.72+. Also moved `marketplace.json` from repo root to `.claude-plugin/marketplace.json` where Claude Code expects it, and added the required `owner` field.
 
 ### D86: Auto-select first Android device when multiple connected
 When multiple Android devices/emulators are connected and `ANDROID_SERIAL` is not set, `adb` commands fail. Snapshot script now auto-exports `ANDROID_SERIAL` from first connected device. Gemini LOW #6.
@@ -341,3 +341,29 @@ Cache check had a second `find` that matched any `.apk`/`.tar.gz` regardless of 
 
 ### D104: Debugger agent includes EAS build path in Step 0
 The debugger agent only showed the local-build path for app installation, which could replace the exact EAS/preview binary the user is trying to debug. Added EAS artifact resolution branch mirroring the tester agent's Step 0. Codex review MEDIUM #5.
+
+## 2026-03-10: Security Hardening (Codex Security Review)
+
+### D105: cdp_evaluate tool description warns about arbitrary JS execution
+`cdp_evaluate` executes arbitrary JavaScript in Hermes with no sandboxing. Added CAUTION prefix to tool description directing agents to prefer targeted tools. Kept unrestricted since this is a dev tool. Codex security review HIGH #1.
+
+### D106: Same-host enforcement on CDP WebSocket URLs
+Metro's `/json/list` returns `webSocketDebuggerUrl` which was used without validation. Added URL hostname filter accepting only `127.0.0.1` and `localhost` after existing IPv6 normalization. Prevents connecting to non-loopback URLs if Metro response is compromised. Codex security review HIGH #2.
+
+### D107: WebSocket hardening — handshakeTimeout and maxPayload
+Added `handshakeTimeout: 5000` and `maxPayload: 100MB` to WebSocket constructor. Also added message shape validation in `handleMessage` to reject non-object CDP messages. Codex security review HIGH #2 (supplementary).
+
+### D108: Tar archive path-traversal validation
+Added pre-extraction scan (`tar -tzf | grep`) rejecting entries with `..` path components or absolute paths. Added post-extraction symlink scan rejecting targets that are absolute or contain `../` traversal. Codex security review HIGH #3.
+
+### D109: BUNDLE_ID regex validation — hard fail on unsafe characters
+Shell-provided `BUNDLE_ID` validated against `^[a-zA-Z][a-zA-Z0-9_.]*$` before use in `adb shell` and `simctl` commands. Hard-fail (exit 1 with JSON error) prevents command injection via crafted bundle IDs. Auto-resolved IDs from `app.json` via jq/node are trusted. Codex security review HIGH #4 (shell).
+
+### D110: PROFILE regex validation in eas_resolve_artifact.sh
+`PROFILE` validated against `^[a-zA-Z0-9_-]+$` to prevent path traversal in `ARTIFACT_PATH` construction. Hard-fail on invalid patterns. Codex security review MEDIUM #6.
+
+### D111: mktemp -d replaces hardcoded /tmp paths
+Replaced `/tmp/rn-dev-agent` and `/tmp/rn-eas-builds` with `mktemp -d` + EXIT trap cleanup. Also replaced hardcoded `/tmp/rn-eas-build-info.json` with `${OUTPUT_DIR}/build-info.json`. Eliminates symlink race conditions and predictable path attacks. Codex security review MEDIUM #5.
+
+### D112: Plugin manifests corrected to Claude Code schema
+Moved `marketplace.json` from repo root to `.claude-plugin/`. Fixed `source.type` → `source.source`, added required `owner` field, prefixed all component paths with `./` in `plugin.json`.

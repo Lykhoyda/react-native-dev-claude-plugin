@@ -306,6 +306,29 @@ claude --plugin-dir ./rn-dev-agent       # local dev
 
 ---
 
+## Phase 8: Security Hardening (2026-03-10)
+
+**Status: Complete**
+
+Codex security review identified 4 High + 4 Medium severity findings. All 4 High-severity findings addressed:
+
+| Finding | Fix | File(s) |
+|---------|-----|---------|
+| Unrestricted `cdp_evaluate` | Added CAUTION warning to tool description | `index.ts` |
+| CDP auto-discovery trusts any loopback service | Same-host (127.0.0.1/localhost) URL enforcement | `cdp-client.ts` |
+| Tar archive path traversal | Pre-extract scan + post-extract symlink check | `expo_ensure_running.sh` |
+| WebSocket no timeout/validation | `handshakeTimeout`, `maxPayload`, message shape guard | `cdp-client.ts` |
+
+Additional shell hardening:
+- BUNDLE_ID regex validation (hard-fail on unsafe chars)
+- PROFILE regex validation (reject path separators)
+- `mktemp -d` + EXIT trap replaces hardcoded `/tmp` paths
+- EAS build-info temp files scoped to `${OUTPUT_DIR}`
+
+Plugin manifests also corrected to match Claude Code schema (D112).
+
+---
+
 ## Source Documents
 
 | Document | Contains |

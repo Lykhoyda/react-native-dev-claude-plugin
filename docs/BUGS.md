@@ -57,3 +57,17 @@
 
 ### B14: Status probe abandoned all probes on first failure (HIGH)
 **Fixed:** Each status probe in the batched IIFE now has its own try/catch (D53).
+
+## Security Fixes (2026-03-10)
+
+### B15: CDP auto-discovery accepted non-loopback WebSocket URLs (HIGH)
+**Fixed:** Added hostname filter accepting only `127.0.0.1` and `localhost` after IPv6 normalization (D106).
+
+### B16: Tar extraction vulnerable to path traversal (HIGH)
+**Fixed:** Pre-extract listing scan rejects `..` components and absolute paths. Post-extract symlink scan rejects absolute and `../` traversal targets (D108).
+
+### B17: Hardcoded /tmp paths vulnerable to symlink races (MEDIUM)
+**Fixed:** Replaced with `mktemp -d` + EXIT trap in both `expo_ensure_running.sh` and `eas_resolve_artifact.sh` (D111).
+
+### B18: BUNDLE_ID and PROFILE unsanitized in shell commands (MEDIUM)
+**Fixed:** Regex validation with hard-fail: BUNDLE_ID `^[a-zA-Z][a-zA-Z0-9_.]*$`, PROFILE `^[a-zA-Z0-9_-]+$` (D109, D110).
