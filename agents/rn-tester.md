@@ -8,7 +8,7 @@ description: |
   "test on simulator", "run on device", "does it work"
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 model: sonnet
-skills: rn-device-control, rn-testing, rn-debugging
+skills: rn-device-control, rn-testing, rn-debugging, rn-expo-builds
 ---
 
 You are a React Native feature testing agent. After a feature is
@@ -18,8 +18,38 @@ implemented, you verify it works correctly on a real simulator/emulator.
 
 ### Step 0: Environment Check
 Call `cdp_status`. If not connected, it auto-connects.
+
+**If Metro is not running or no Hermes target found**, attempt auto-recovery
+before stopping:
+
+1. Detect platform: check `xcrun simctl list devices booted` (iOS) or
+   `adb devices` (Android).
+2. If using an EAS build (`--eas` flag or user request):
+   ```bash
+   RESULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/eas_resolve_artifact.sh <platform> [profile]) || EXIT_CODE=$?
+   EXIT_CODE="${EXIT_CODE:-0}"
+   # Parse exit code:
+   #   0 → extract path: ARTIFACT=$(echo "$RESULT" | jq -r '.path')
+   #   2 → ambiguous profiles: show list to user, ask which one, re-run with choice
+   #   3 → tell user: "Install eas-cli: npm install -g eas-cli"
+   #   4 → no eas.json, use local build instead
+   if [ "$EXIT_CODE" -eq 0 ]; then
+     # Parse .path from JSON (use jq if available, otherwise node)
+     ARTIFACT=$(echo "$RESULT" | jq -r '.path' 2>/dev/null) || \
+       ARTIFACT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).path)" <<< "$RESULT")
+     bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform> --artifact "$ARTIFACT"
+   fi
+   ```
+3. Otherwise (local dev build):
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform>
+   ```
+4. After exit 0: call `cdp_status` again to confirm CDP connects.
+5. If the script fails (exit 1-4), report the JSON error message and STOP.
+
+**SKIP the build step entirely if `cdp_status` returned a connected state.**
+
 STOP if:
-- Metro not running -> tell user: "Start Metro with `npx expo start`"
 - App has RedBox -> read error with `cdp_error_log`, fix it first
 - Debugger paused -> `cdp_reload` to recover
 
@@ -52,17 +82,18 @@ Then verify: `cdp_navigation_state` confirms you're on the right screen.
 
 For EACH step in the flow:
 
-1. **Act**: Write a minimal Maestro flow and run it:
+1. **Act**: Write a minimal Maestro flow and run it.
+   Substitute `<app-bundle-id>` with the actual bundle ID from Step 1:
    ```bash
-   cat > /tmp/step.yaml << 'EOF'
-   appId: com.example.app
+   cat > /tmp/step.yaml << EOF
+   appId: <app-bundle-id>
    ---
    - tapOn:
        id: "add-to-cart-btn"
    - assertVisible:
        id: "cart-badge"
    EOF
-   maestro test /tmp/step.yaml
+   maestro-runner test /tmp/step.yaml  # or: maestro test /tmp/step.yaml
    ```
 
 2. **Wait for settle**: Maestro's assertVisible handles this.
@@ -116,9 +147,10 @@ Summarize:
    before querying CDP state. The React render cycle needs time.
 
 3. **Native errors are invisible to CDP**: If cdp_error_log is empty
-   but the app crashed, run:
-    - Android: `adb logcat -s ReactNative:E ReactNativeJS:E --pid=$(adb shell pidof -s com.example.app)`
-    - iOS: `xcrun simctl spawn booted log stream --predicate 'processImagePath contains "YourApp" AND logType == error'`
+   but the app crashed, check native logs. Replace placeholders with
+   actual bundle ID and binary name from Step 1:
+    - Android: `APP_PID=$(adb shell pidof <bundle-id> 2>/dev/null | awk '{print $1}') || APP_PID=$(adb shell ps | grep <bundle-id> | awk '{print $2}'); if [ -n "$APP_PID" ]; then adb logcat -d -s ReactNative:E ReactNativeJS:E --pid="$APP_PID"; else adb logcat -d -b crash; fi`
+    - iOS: `xcrun simctl spawn booted log show --last 5m --predicate 'processImagePath ENDSWITH "/<binary-name>" AND logType == error'`
 
 4. **Fiber tree != screen**: A component in the fiber tree may be
    off-screen, behind a modal, or invisible. Use Maestro's

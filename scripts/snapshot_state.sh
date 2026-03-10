@@ -48,22 +48,27 @@ case "$PLATFORM" in
     ;;
 
   android)
-    # Check for multiple connected devices
+    # Check for multiple connected devices — auto-select first if ANDROID_SERIAL not set
     DEVICE_COUNT=$(adb devices 2>/dev/null | grep -c "device$" || true)
-    if [ "$DEVICE_COUNT" -gt 1 ]; then
-      echo "Warning: Multiple Android devices detected ($DEVICE_COUNT). Using first device." >&2
-      echo "Specify a device with ANDROID_SERIAL env var if needed." >&2
+    if [ "$DEVICE_COUNT" -gt 1 ] && [ -z "${ANDROID_SERIAL:-}" ]; then
+      export ANDROID_SERIAL
+      ANDROID_SERIAL=$(adb devices | grep -m1 "device$" | awk '{print $1}')
+      echo "Warning: Multiple Android devices ($DEVICE_COUNT). Auto-selecting $ANDROID_SERIAL." >&2
     fi
+
+    # Use PID-suffixed temp file to avoid race conditions on concurrent runs
+    TMP_XML="/data/local/tmp/uidump_$$.xml"
 
     # Run screenshot and UI hierarchy dump concurrently
     adb exec-out screencap -p > "$OUTPUT_DIR/screenshot.png" &
     PID_SCREENSHOT=$!
 
     # Dump UI hierarchy to device file first, then pull it — piping /dev/stdout
-    # prepends a status message that corrupts the XML output
+    # prepends a status message that corrupts the XML output.
+    # Note: || true after uiautomator dump prevents set -e from aborting the subshell
     (
-      adb shell uiautomator dump --compressed /data/local/tmp/uidump.xml >/dev/null 2>&1
-      adb exec-out cat /data/local/tmp/uidump.xml | \
+      adb shell uiautomator dump --compressed "$TMP_XML" >/dev/null 2>&1 || true
+      adb exec-out cat "$TMP_XML" | \
         python3 -c "
 import xml.etree.ElementTree as ET, json, sys
 try:
@@ -79,7 +84,7 @@ except Exception as e:
     json.dump([], sys.stdout)
     sys.exit(1)
 "
-      adb shell rm -f /data/local/tmp/uidump.xml 2>/dev/null || true
+      adb shell rm -f "$TMP_XML" 2>/dev/null || true
     ) > "$OUTPUT_DIR/ui_elements.json" &
     PID_HIERARCHY=$!
 

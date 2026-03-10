@@ -19,6 +19,7 @@ native device logs, and bash tools.
 | What did console.log output? | MCP | `cdp_console_log(level="all")` |
 | Did the JS engine pause? | MCP | `cdp_status` (reports isPaused) |
 | Is there a RedBox overlay? | MCP | `cdp_component_tree` (auto-detects and warns) |
+| Dismiss RedBox / toggle inspector | MCP | `cdp_dev_settings(action="dismissRedBox")` |
 | Is Metro bundler alive? | bash | `curl localhost:8081/status` |
 | Is a specific element on screen? | Maestro | `assertVisible: "element"` |
 | What are all UI elements' positions? | bash | `adb shell uiautomator dump` (Android only) |
@@ -39,9 +40,9 @@ framework panics are invisible to CDP — always check native logs as fallback.
 | Uncaught error overlay (RedBox) | `cdp_component_tree` (APP_HAS_REDBOX warning) | MCP |
 | `console.error()` call | `cdp_console_log(level="error")` | MCP |
 | Metro bundle syntax error | `curl localhost:8081/status` | bash |
-| Native crash (iOS) | `xcrun simctl spawn booted log stream --predicate 'processImagePath contains "YourApp" AND logType == error'` | bash |
+| Native crash (iOS) | `xcrun simctl spawn booted log stream --predicate 'processImagePath ENDSWITH "/YourApp" AND logType == error'` | bash |
 | Native crash (Android) | `adb logcat -b crash` | bash |
-| RN framework error (Android) | `adb logcat -s ReactNative:E ReactNativeJS:E --pid=$(adb shell pidof -s com.example.app)` | bash |
+| RN framework error (Android) | `adb logcat -s ReactNative:E ReactNativeJS:E --pid=$(adb shell pidof com.example.app \| awk '{print $1}')` | bash |
 | Network failure | `cdp_network_log` (look for status=0 or missing status) | MCP |
 
 ---
@@ -100,7 +101,7 @@ this automatically — no action needed.
 ## Post-Reload Readiness
 
 After `cdp_reload`, the server auto-reconnects and waits for React DevTools
-hook (up to 8 seconds). If `cdp_component_tree` returns "No fiber roots"
+hook (up to 30 seconds). If `cdp_component_tree` returns "No fiber roots"
 immediately after reload, wait 2 seconds and retry.
 
 Manual readiness check:
@@ -149,9 +150,9 @@ Wrong export or circular import. Check `cdp_console_log(level="error")` for cont
 ### App Crashes With No CDP Error
 Native crash. Check:
 ```bash
-# iOS
+# iOS (use actual binary name — see "Native Log Commands Reference")
 xcrun simctl spawn booted log stream \
-  --predicate 'processImagePath contains "YourApp"' --level error
+  --predicate 'processImagePath ENDSWITH "/YourApp" AND logType == error'
 
 # Android
 adb logcat -b crash
@@ -172,13 +173,16 @@ Use `path` parameter on `cdp_store_state` to drill into specific keys.
 ### iOS
 
 ```bash
-# Stream error logs from app
+# Stream error logs from app (use ENDSWITH for binary name precision)
 xcrun simctl spawn booted log stream \
-  --predicate 'processImagePath contains "YourApp" AND logType == error'
+  --predicate 'processImagePath ENDSWITH "/YourApp" AND logType == error'
 
 # Get logs from last 2 minutes
 xcrun simctl spawn booted log show \
-  --predicate 'processImagePath contains "YourApp"' --last 2m
+  --predicate 'processImagePath ENDSWITH "/YourApp"' --last 2m
+
+# Find the actual binary name for the predicate:
+ls $(xcrun simctl get_app_container booted com.example.app)
 ```
 
 ### Android
@@ -187,9 +191,10 @@ xcrun simctl spawn booted log show \
 # Crash log only
 adb logcat -b crash
 
-# React Native errors
-adb logcat -s ReactNative:E ReactNativeJS:E \
-  --pid=$(adb shell pidof -s com.example.app)
+# React Native errors (pidof without -s for broader compatibility)
+APP_PID=$(adb shell pidof com.example.app 2>/dev/null | awk '{print $1}') || \
+  APP_PID=$(adb shell ps | grep com.example.app | awk '{print $2}')
+adb logcat -s ReactNative:E ReactNativeJS:E --pid=$APP_PID
 
 # Clear buffer before test
 adb logcat -c

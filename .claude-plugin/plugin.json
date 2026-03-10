@@ -14,13 +14,14 @@
   "commands": [
     "commands/test-feature.md",
     "commands/debug-screen.md",
-    "commands/check-env.md"
+    "commands/check-env.md",
+    "commands/build-and-test.md"
   ],
   "hooks": "hooks/hooks.json",
   "mcpServers": {
     "rn-dev-agent-cdp": {
       "command": "node",
-      "args": ["scripts/cdp-bridge/dist/index.js"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/cdp-bridge/dist/index.js"]
     }
   }
 }

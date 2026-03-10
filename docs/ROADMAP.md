@@ -139,36 +139,61 @@ Total per step: ~1.4 seconds (down from ~3.1s in naive approach)
 
 ## Roadmap
 
-### Phase 1: CDP Bridge Foundation ✅
+### Phase 1: CDP Bridge Foundation ✅ (redone 2026-03-10)
 **Deliverables:**
 - [x] `scripts/cdp-bridge/` — MCP server with `cdp_status`, `cdp_evaluate`, `cdp_reload`
 - [x] Auto-discovery: scan ports 8081/8082/19000/19006, filter Hermes targets, normalize IPv6
 - [x] Connection lifecycle: retry, timeout wrapper (5s), WS close code handling
 - [x] `Debugger.enable` + auto-resume on `Debugger.paused`
 - [x] `.mcp.json` config
+- [x] `utils.ts` — `withConnection()` wrapper, `textResult`/`errorResult` (D50-D51)
+- [x] CRITICAL fix: `msg.result` unpacking in handleMessage (D52)
+- [x] Batched status probes — single evaluate call with per-probe try/catch (D53)
+- [x] B2 fix: REACT_READY_TIMEOUT_MS 8s → 30s (D54)
+- [x] `/json/list` timeout, target URL filter, stale connectedTarget cleanup (D56-D58)
+- [x] Gemini review: 4 HIGH, 2 MEDIUM, 2 LOW — all fixed
 
-### Phase 2: Injected Helpers ✅
+### Phase 2: Injected Helpers ✅ (redone 2026-03-10)
 **Deliverables:**
 - [x] `injected-helpers.ts` — full `globalThis.__RN_AGENT` object (included in Phase 1)
 - [x] `cdp_component_tree` — fiber walker with filter, depth limit, WeakSet, RedBox detection, 50KB cap, text node capture
 - [x] `cdp_navigation_state` — Expo Router + React Navigation + fiber walk fallback
 - [x] `cdp_error_log` — ErrorUtils hook + Hermes promise rejection tracker + clear option
+- [x] Fiber walks refactored: while-loop siblings, recurse only on children (D63)
+- [x] Prop stringification uses shallow summaries for objects/arrays (D64)
+- [x] Nav state uses safeStringify for circular-reference safety (D65)
+- [x] safeStringify handles getter exceptions gracefully (D66)
+- [x] Network hook handles synchronous fetch exceptions (D67)
+- [x] Gemini review: 1 HIGH, 4 MEDIUM, 2 LOW — all fixed
 
-### Phase 3: Data Layer ✅
+### Phase 3: Data Layer ✅ (redone 2026-03-10)
 **Deliverables:**
 - [x] `cdp_network_log` — CDP Network domain (RN 0.83+) + fetch/XHR hook fallback
 - [x] `cdp_console_log` — Runtime.consoleAPICalled + ring buffer
 - [x] `cdp_store_state` — Redux (fiber walk for Provider) + Zustand (global.__ZUSTAND_STORES__)
 - [x] `ring-buffer.ts` — shared event buffer implementation (included in Phase 1)
 - [x] `cdp_dev_settings` — programmatic reload, toggle inspector, dismiss RedBox
+- [x] Defensive nullish defaults for limit params (D68)
+- [x] Network.loadingFailed handler for failed requests (D69)
+- [x] Console log correctly stringifies null values (D70)
+- [x] autoConnect guards against concurrent reconnection (D71)
+- [x] Gemini review: 2 HIGH, 3 MEDIUM, 1 LOW — all actionable fixed
 
-### Phase 4: Skills ✅
+### Phase 4: Skills ✅ (redone 2026-03-10)
 **Deliverables:**
 - [x] `skills/rn-device-control/SKILL.md` — full simctl + adb reference, JPEG screenshots, UI hierarchy dump, device settings, language changes, animation disable
 - [x] `skills/rn-testing/SKILL.md` — maestro-runner patterns, timing rules, fast test pattern, testID best practices, Zustand setup, network mocking, multi-device
 - [x] `skills/rn-debugging/SKILL.md` — CDP vs bash decision table, error types matrix, connection troubleshooting, post-reload readiness
+- [x] Pre-review fixes: uiautomator dump file-based approach, snapshot script reference, timeout 30s, iOS log predicate
+- [x] Gemini review: 2 HIGH, 2 MEDIUM, 2 LOW — all fixed (D72-D77)
+  - Removed misleading gzip screenshot command (PNG already deflate-compressed)
+  - Network mock handles Request objects, URL instances, sets Content-Type
+  - iOS log predicate uses ENDSWITH for binary name precision
+  - Zustand docs clarify .getState() is called at query time
+  - Added cdp_dev_settings to debugging decision table
+  - Android pidof without -s flag, with ps fallback for compatibility
 
-### Phase 5: Agents + Commands ✅
+### Phase 5: Agents + Commands ✅ (redone 2026-03-10)
 **Deliverables:**
 - [x] `agents/rn-tester.md` — 7-step protocol, scoped tree queries, timing rules, native error fallback
 - [x] `agents/rn-debugger.md` — diagnostic flow, parallel data gathering, fix-verify cycle
@@ -176,16 +201,74 @@ Total per step: ~1.4 seconds (down from ~3.1s in naive approach)
 - [x] `commands/debug-screen.md` — `/rn-dev-agent:debug-screen`
 - [x] `commands/check-env.md` — `/rn-dev-agent:check-env`
 - [x] `plugin.json`
+- [x] Pre-review fixes: updated native log commands in both agents to match Phase 4 skill updates
+- [x] Gemini review: 1 HIGH, 2 MEDIUM, 2 LOW — all fixed (D78-D80)
+  - Debugger agent now has Step 0 for bundle ID/binary name discovery
+  - Maestro templates use placeholders with substitution instructions
+  - Android logcat command consistent across both agents (pidof fallback)
 
-### Phase 6: Polish + Speed ✅
+### Phase 6: Polish + Speed ✅ (redone 2026-03-10)
 **Deliverables:**
 - [x] `hooks/hooks.json` — SessionStart RN project detection (detects metro.config, app.json, app.config.js/ts)
 - [x] `scripts/snapshot_state.sh` — concurrent screenshot + UI hierarchy (dump-to-file fix, trap cleanup, exit code handling)
 - [x] `plugin.json` updated with hooks reference
 - [x] Zombie target filtering (pick highest page ID) — implemented in Phase 1 cdp-client.ts
 - [x] Reconnect hardening: reject pending on WS close, catch reload errors — implemented in Phase 1 cdp-client.ts
+- [x] Gemini review: 3 HIGH, 2 MEDIUM, 2 LOW — all actionable fixed (D81-D86)
+  - Hook checks package.json for react-native/expo dependencies (prevents false positives)
+  - Snapshot subshell tolerates uiautomator dump failures with || true
+  - MCP config uses ${CLAUDE_PLUGIN_ROOT} for path resolution
+  - PID-suffixed temp file prevents concurrent snapshot race conditions
+  - Marketplace JSON uses type instead of source for source kind
+  - Auto-selects first Android device when multiple connected
 - [ ] maestro-runner auto-detection in skills (prefer over Maestro) — deferred to post-MVP
 - [ ] README.md update with installation + usage guide — deferred to post-MVP
+
+### Phase 7: Expo/EAS Build Integration ✅ (2026-03-10)
+**Deliverables:**
+- [x] `scripts/eas_resolve_artifact.sh` — three-tier EAS artifact resolver (cache → EAS servers → manual)
+  - JSON stdout contract on all exit paths
+  - Profile auto-selection: filter by `ios.simulator:true` / `android.buildType:"apk"`
+  - Ambiguous profile handling (exit 2 with profile list)
+  - jq primary with Node.js fallback for eas.json parsing
+- [x] `scripts/expo_ensure_running.sh` — device lifecycle manager
+  - Three modes: no artifact (local dev build), .tar.gz (iOS EAS), .apk (Android EAS)
+  - Metro auto-start with port detection (8081/8082/19000/19006)
+  - Bundle ID auto-resolution from app.json
+  - Multi-device handling for Android
+- [x] `commands/build-and-test.md` — `/rn-dev-agent:build-and-test <description>` slash command
+  - Supports `--eas [profile]` flag for EAS builds
+  - Delegates to `rn-tester` agent with build pre-flight
+- [x] `agents/rn-tester.md` updated — Step 0 extended with build pre-flight
+  - EAS artifact resolution with exit code handling
+  - Local dev build fallback
+  - Skip build if already connected
+- [x] `agents/rn-debugger.md` updated — Step 0 with app install instructions
+- [x] `skills/rn-device-control/SKILL.md` updated — Expo/EAS Build Integration section
+  - Decision table (when to build vs skip)
+  - Script references with exit codes and JSON output shapes
+  - Combined workflow examples
+- [x] `hooks/detect-rn-project.sh` updated — build-and-test in command hints
+- [x] `plugin.json` updated — build-and-test.md in commands array
+- [x] Gemini review: 4 HIGH, 2 MEDIUM, 2 LOW — all fixed (D87-D95)
+  - grep -c fallback with || true (prevents set -e abort)
+  - select_profile writes to global PROFILE (JSON stdout preserved)
+  - Removed macOS-incompatible timeout command
+  - Removed head -1 that corrupted multi-line JSON
+  - BSD find -maxdepth before -name
+  - Agent script invocation captures exit code without aborting
+  - EAS CLI stderr routed to log file
+  - Cache sorting uses ls -t for chronological order
+- [x] Gemini+Codex review round 2: 3 HIGH, 2 MEDIUM — all fixed (D96-D100)
+  - Cache sorting uses find -exec stat (xargs runs ls on CWD when empty)
+  - Agent logcat/log commands use non-blocking -d / log show forms
+  - Empty APP_PID guard before logcat --pid
+  - Operator precedence fix in bundle ID resolution
+  - Agent JSON parsing falls back to node when jq unavailable
+  - Removed overly broad cache fallback (wrong project artifact risk)
+  - JSON helpers escape special characters (quotes, backslashes, newlines)
+  - Launch failure emits warning instead of silent swallow
+  - Debugger agent includes EAS build path in Step 0
 
 ---
 

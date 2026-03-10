@@ -8,11 +8,8 @@
 **Workaround:** The fetch/XHR hook fallback (`NETWORK_HOOK_SCRIPT`) exists but is only injected when `Network.enable` throws. May need to always inject both and merge results.
 **Status:** Open — needs testing with RN < 0.83
 
-### B2: waitForReact timeout may be too short for cold starts
-**Severity:** Low
-**Description:** `REACT_READY_TIMEOUT_MS` is 8000ms. First Metro bundle can take 30-60s. If timeout fires, helpers inject into a non-ready environment.
-**Workaround:** User can call `cdp_status` again after app finishes loading.
-**Status:** Open — consider increasing to 30s or making configurable
+### ~~B2: waitForReact timeout may be too short for cold starts~~
+**RESOLVED** — Increased to 30s (D54). Logs warning when timeout fires.
 
 ### B3: Navigation state fallback relies on brittle internal fiber state
 **Severity:** Medium
@@ -48,3 +45,15 @@
 
 ### B10: No auto-build on npm install (HIGH)
 **Fixed:** Added `"prepare": "tsc"` to package.json.
+
+### B11: evaluate() always returned undefined due to wrong CDP message nesting (CRITICAL)
+**Fixed:** `handleMessage` resolved with full `msg` instead of `msg.result`. All evaluate calls received `{ value: undefined }` and never detected exceptions. Fixed by resolving with `msg.result` (D52).
+
+### B12: Store state tool rejected valid state containing 'error' key (HIGH)
+**Fixed:** Changed injected helper to use `__agent_error` sentinel. Valid Redux/Zustand state with `error` keys now passes through correctly (D55).
+
+### B13: Reload tool entered 15s polling loop on silent evaluate failure (HIGH)
+**Fixed:** Now checks `result.error` before entering reconnection polling (D60).
+
+### B14: Status probe abandoned all probes on first failure (HIGH)
+**Fixed:** Each status probe in the batched IIFE now has its own try/catch (D53).

@@ -1,11 +1,16 @@
 {
-  "hooks": [
-    {
-      "type": "SessionStart",
-      "description": "Detect React Native project and hint user about available commands",
-      "condition": "file_exists:package.json AND (file_exists:metro.config.js OR file_exists:metro.config.ts OR file_exists:app.json OR file_exists:app.config.js OR file_exists:app.config.ts)",
-      "action": "inform",
-      "message": "React Native project detected. The rn-dev-agent plugin is active.\n\nAvailable commands:\n  /rn-dev-agent:test-feature <description> - Test a feature end-to-end\n  /rn-dev-agent:debug-screen              - Diagnose and fix the current screen\n  /rn-dev-agent:check-env                 - Verify environment is ready\n\nMake sure Metro is running before testing."
-    }
-  ]
+  "description": "Detect React Native projects on session start and hint available commands",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/detect-rn-project.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

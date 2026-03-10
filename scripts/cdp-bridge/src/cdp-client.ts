@@ -12,7 +12,8 @@ import type {
 } from './types.js';
 
 const CDP_TIMEOUT_MS = 5000;
-const REACT_READY_TIMEOUT_MS = 8000;
+const REACT_READY_TIMEOUT_MS = 30000;
+const REACT_READY_POLL_MS = 500;
 const RECONNECT_DELAY_MS = 1500;
 const RECONNECT_ATTEMPTS = 10;
 const RECONNECT_RETRY_MS = 1000;
@@ -54,7 +55,7 @@ export class CDPClient {
   get connectionGeneration(): number { return this._connectionGeneration; }
 
   async autoConnect(portHint?: number): Promise<string> {
-    if (this._state === 'connecting') {
+    if (this._state === 'connecting' || this.reconnecting) {
       throw new Error('Already connecting to Metro...');
     }
     if (this.disposed) {
@@ -93,11 +94,21 @@ export class CDPClient {
     }
     this._port = metroPort;
 
-    const targetsResp = await fetch(`http://127.0.0.1:${metroPort}/json/list`);
-    const targets = (await targetsResp.json()) as HermesTarget[];
+    const listCtrl = new AbortController();
+    const listTimer = setTimeout(() => listCtrl.abort(), DISCOVERY_TIMEOUT_MS * 2);
+    let targets: HermesTarget[];
+    try {
+      const targetsResp = await fetch(`http://127.0.0.1:${metroPort}/json/list`, { signal: listCtrl.signal });
+      targets = (await targetsResp.json()) as HermesTarget[];
+    } catch (err) {
+      this._state = 'disconnected';
+      throw new Error(`Failed to list CDP targets on port ${metroPort}: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      clearTimeout(listTimer);
+    }
 
     const validTargets = targets
-      .filter(t => t.vm === 'Hermes' && !t.title?.includes('Experimental'))
+      .filter(t => t.vm === 'Hermes' && !!t.webSocketDebuggerUrl && !t.title?.includes('Experimental'))
       .map(t => ({
         ...t,
         webSocketDebuggerUrl: t.webSocketDebuggerUrl
@@ -233,7 +244,7 @@ export class CDPClient {
         if (msg.error) {
           pending.reject(new Error(msg.error.message));
         } else {
-          pending.resolve(msg);
+          pending.resolve(msg.result);
         }
       } else if (msg.method) {
         const handler = this.eventHandlers.get(msg.method);
@@ -243,8 +254,8 @@ export class CDPClient {
           this.parseNetworkHookMessage(msg.params);
         }
       }
-    } catch {
-      // Malformed message, ignore
+    } catch (err) {
+      console.error('CDP: malformed message:', err instanceof Error ? err.message : err);
     }
   }
 
@@ -321,7 +332,7 @@ export class CDPClient {
       const p = params as { type: string; args?: Array<{ value?: unknown; description?: string }> };
       this._consoleBuffer.push({
         level: p.type,
-        text: p.args?.map(a => a.value ?? a.description ?? '').join(' ') ?? '',
+        text: p.args?.map(a => a.value !== undefined ? String(a.value) : (a.description ?? '')).join(' ') ?? '',
         timestamp: new Date().toISOString(),
       });
     });
@@ -341,6 +352,15 @@ export class CDPClient {
       const entry = this._networkBuffer.findLast(e => e.id === p.requestId);
       if (entry) {
         entry.status = p.response?.status;
+        entry.duration_ms = Date.now() - new Date(entry.timestamp).getTime();
+      }
+    });
+
+    this.eventHandlers.set('Network.loadingFailed', (params: unknown) => {
+      const p = params as { requestId: string };
+      const entry = this._networkBuffer.findLast(e => e.id === p.requestId);
+      if (entry) {
+        entry.status = 0;
         entry.duration_ms = Date.now() - new Date(entry.timestamp).getTime();
       }
     });
@@ -368,13 +388,15 @@ export class CDPClient {
       } catch {
         // Not ready yet
       }
-      await this.sleep(500);
+      await this.sleep(REACT_READY_POLL_MS);
     }
+    console.error(`CDP: React not ready after ${timeout}ms — helpers will be injected anyway`);
   }
 
   private handleClose(code: number): void {
     this._state = 'disconnected';
     this._helpersInjected = false;
+    this._connectedTarget = null;
 
     if (this.disposed || this.reconnecting) return;
 

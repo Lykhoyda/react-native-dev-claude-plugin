@@ -237,18 +237,34 @@ Use `cdp_dev_settings` for programmatic control:
 ## Network Mocking (for API-dependent features)
 
 ```typescript
-// In the app code (dev only):
-if (__DEV__ && global.__RN_AGENT_MOCKS__) {
-  const mocks = global.__RN_AGENT_MOCKS__;
+// In the app code (dev only) — add to app entry point:
+if (__DEV__ && !global.__RN_AGENT_FETCH_PATCHED__) {
+  global.__RN_AGENT_FETCH_PATCHED__ = true;
   const origFetch = global.fetch;
-  global.fetch = (url, opts) => {
-    if (mocks[url]) return Promise.resolve(new Response(JSON.stringify(mocks[url])));
-    return origFetch(url, opts);
+  global.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const mocks = global.__RN_AGENT_MOCKS__;
+    if (!mocks) return origFetch(input, init);
+
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof Request
+        ? input.url
+        : input.toString();
+
+    if (mocks[url]) {
+      return Promise.resolve(
+        new Response(JSON.stringify(mocks[url]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }
+    return origFetch(input, init);
   };
 }
 ```
 
-The agent injects mocks via CDP:
+The agent injects mocks via CDP before navigating to the screen under test:
 ```
 cdp_evaluate:
   expression: 'global.__RN_AGENT_MOCKS__ = { "https://api.example.com/products": [{ id: 1, name: "Test" }] }'
@@ -259,10 +275,11 @@ cdp_evaluate:
 ## Zustand Store Inspection Setup
 
 Zustand v4+ uses `useSyncExternalStore`, NOT React Context. Fiber tree walking
-cannot detect Zustand stores. This 1-line setup exposes all stores:
+cannot detect Zustand stores. This 1-line setup registers store hooks for
+the MCP tool to call `.getState()` on at query time:
 
 ```typescript
-// app/_layout.tsx or App.tsx
+// app/_layout.tsx or App.tsx — register the store hooks (not state snapshots)
 if (__DEV__) {
   global.__ZUSTAND_STORES__ = {
     auth: useAuthStore,
@@ -272,7 +289,12 @@ if (__DEV__) {
 }
 ```
 
-Then query: `cdp_store_state(path="cart.items")`
+The `cdp_store_state` MCP tool calls `store.getState()` on each registered
+hook at the moment of the query, so results are always fresh:
+```
+cdp_store_state(path="cart.items")     # reads useCartStore.getState().items
+cdp_store_state(path="auth")           # reads full useAuthStore.getState()
+```
 
 ---
 

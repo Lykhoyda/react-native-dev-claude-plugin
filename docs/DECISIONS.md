@@ -162,3 +162,182 @@ When multiple Android devices/emulators are connected, `adb` commands fail with 
 
 ### D49: app.config.ts added to hook detection conditions
 Expo projects using TypeScript config files (`app.config.ts`) were not detected by the SessionStart hook. Added `file_exists:app.config.ts` to the OR condition.
+
+## 2026-03-10: Phase 1 Redo (feature-dev + Gemini Review)
+
+### D50: withConnection() wrapper eliminates tool handler boilerplate
+All 9 tool handlers (except status) had identical connection check, helpers check, and try/catch patterns. Extracted `withConnection<T>(getClient, handler, options)` in `utils.ts` that handles all three concerns. Tool handlers now only contain business logic.
+
+### D51: textResult/errorResult moved from types.ts to utils.ts
+Utility functions don't belong with type definitions. Created `utils.ts` with `textResult`, `errorResult`, `withConnection`, and the `ToolResult` type.
+
+### D52: CRITICAL — resolve msg.result not msg in handleMessage
+`sendWithTimeout` was resolving with the full CDP message (`{ id, result: { result: { value }, exceptionDetails } }`). `evaluate()` cast the result expecting the inner payload but accessed the wrong nesting level — `result.exceptionDetails` and `result.result.value` were always undefined. Fixed: `pending.resolve(msg.result)`. Gemini review HIGH #1.
+
+### D53: Batched status probes into single evaluate call
+`cdp_status` previously made 4 sequential `Runtime.evaluate` calls. Replaced with a single IIFE that gathers all status data in one round-trip. Each probe has its own try/catch so one failure doesn't block others. ~4x faster status checks.
+
+### D54: REACT_READY_TIMEOUT_MS increased from 8s to 30s
+Bug B2 — cold starts can take 30-60s for first Metro bundle. Increased timeout and added console.error log when timeout fires so developers know helpers were injected into a potentially unready environment.
+
+### D55: Store state uses __agent_error sentinel instead of error
+Valid Redux/Zustand state slices commonly contain `error` keys (e.g., `state.auth.error`). Changed injected helper to use `__agent_error` for agent-level errors. Gemini review HIGH #3.
+
+### D56: /json/list fetch gets AbortController timeout
+Metro `/json/list` endpoint had no timeout — could hang indefinitely if Metro accepts connections but the CDP endpoint stalls. Added AbortController with 3s timeout. Gemini review MEDIUM #6.
+
+### D57: Filter targets missing webSocketDebuggerUrl
+Targets without `webSocketDebuggerUrl` would cause `new WebSocket(undefined)` TypeError. Added `!!t.webSocketDebuggerUrl` to the filter condition. Gemini review LOW #7.
+
+### D58: Clear connectedTarget on WebSocket close
+`handleClose` didn't clear `_connectedTarget`, causing `cdp_status` to report stale device info after disconnection. Now sets `_connectedTarget = null`. Gemini review LOW #8.
+
+### D59: Console log filters internal messages before applying limit
+Previously, `getLast(limit)` was called first, then internal `__RN_NET__:` messages were filtered out, potentially returning fewer entries than requested. Now fetches full buffer, filters internal messages, then slices to limit. Gemini review MEDIUM #5.
+
+### D60: Reload tool checks evaluate result before polling
+`cdp_reload` ignored `evaluate()` error results (non-throwing failures). If `DevSettings.reload()` failed without throwing, the tool entered a 15s polling loop. Now checks `result.error` and returns immediately on failure. Gemini review HIGH #2.
+
+### D61: Removed declaration:true from tsconfig
+MCP server doesn't need `.d.ts` files. Removed to reduce build artifacts.
+
+### D62: Malformed CDP messages now logged instead of silently swallowed
+Empty catch block in `handleMessage` replaced with `console.error` logging for debugging.
+
+## 2026-03-10: Phase 2 Redo — Injected Helpers (Gemini Review)
+
+### D63: Fiber walk functions use while-loop for siblings, recurse only on children
+`hasErrorOverlay`, `findNav`, and `findStore` previously recursed on both `fiber.child` and `fiber.sibling`, incrementing depth for both. This caused: (a) depth limit exhausted by wide sibling lists, missing deeper tree branches, and (b) stack overflow risk on long sibling chains. Refactored to iterate siblings with `while` loop and recurse only on `child`. Gemini HIGH #1.
+
+### D64: Prop stringification uses shallow summary for objects/arrays
+`getTree` previously called `JSON.stringify(v)` on every prop, which could freeze the Hermes JS thread on large objects (10MB+ cached API responses, Redux slices passed as props). Now returns `[Array(N)]` for arrays and `{key1, key2, ...}` summary for objects. Gemini MEDIUM #2.
+
+### D65: Navigation state uses safeStringify instead of JSON.stringify
+Early returns for Expo Router and React Navigation DevTools state used raw `JSON.stringify`, which throws on circular references in route params. Switched to `safeStringify(state, 50000)`. Gemini MEDIUM #3.
+
+### D66: safeStringify handles getter exceptions and serialization failures
+The replacer function now wraps each value check in try/catch to handle getter properties that throw. The outer function also catches total serialization failure and returns `{ __agent_error: "..." }`. Gemini MEDIUM #5.
+
+### D67: Network hook fetch wrapper handles synchronous exceptions
+`origFetch.apply()` can throw synchronously on malformed URLs. Wrapped in try/catch that reports the response event before re-throwing, preventing dangling pending requests. Gemini LOW #6.
+
+## 2026-03-10: Phase 3 Redo — Data Layer (Gemini Review)
+
+### D68: Defensive nullish defaults for limit parameters
+`Math.max(undefined, 1)` returns `NaN`, causing `getLast(NaN)` to return empty arrays and `slice(-NaN)` to return everything. Added `?? 20` and `?? 50` fallbacks in network-log and console-log handlers. Gemini HIGH #1.
+
+### D69: Network.loadingFailed handler for failed requests
+Missing handler meant DNS failures, connection refused, CORS errors, and aborted requests stayed as perpetually pending entries in the network buffer. Now assigns `status: 0` and calculates duration on failure. Gemini HIGH #2.
+
+### D70: Console log correctly stringifies null values
+`a.value ?? a.description` with nullish coalescing skipped `null` values (which are valid JS). Changed to `a.value !== undefined ? String(a.value) : (a.description ?? '')` so `console.log(null)` correctly captures "null". Gemini MEDIUM #3.
+
+### D71: autoConnect guards against concurrent reconnection
+If `reconnect()` was sleeping between attempts and a tool called `autoConnect()`, two WebSocket connections could race. Added `this.reconnecting` to the guard condition. Gemini MEDIUM #5.
+
+## 2026-03-10: Phase 4 Skills — Gemini Review Fixes
+
+### D72: Remove gzip screenshot command for Android
+PNG output from `screencap -p` is already deflate-compressed internally. Wrapping in `gzip -1` yields negligible size reduction while adding command complexity. Removed the gzip approach; plain `exec-out screencap -p` is the recommended method. Gemini HIGH #1.
+
+### D73: Network mocking handles Request objects and sets Content-Type
+The fetch mock only checked `url` as a string, but `fetch()` accepts `Request` objects and `URL` instances. Updated to extract URL from all input types. Also sets `Content-Type: application/json` header on mock responses. Added guard against double-patching with `__RN_AGENT_FETCH_PATCHED__` flag. Gemini HIGH #2.
+
+### D74: iOS log predicate uses ENDSWITH instead of contains
+`processImagePath contains "YourApp"` can match unrelated system processes with similar substrings. Changed to `ENDSWITH "/YourApp"` for precision. Added instructions for finding the actual binary name via `get_app_container`. Gemini MEDIUM #1.
+
+### D75: Zustand store setup clarifies .getState() behavior
+Documentation now explicitly states that users register store *hooks* (not state snapshots), and the MCP tool calls `.getState()` at query time for fresh results. Prevents misconception that state is captured at registration. Gemini MEDIUM #2.
+
+### D76: Add cdp_dev_settings to debugging decision table
+Tool was implemented but missing from the "CDP vs Bash Decision Table" in rn-debugging skill. Added entry for dismissing RedBox and toggling inspector. Gemini LOW #1.
+
+### D77: Android pidof without -s flag for broader compatibility
+The `-s` flag (single PID) is not available on all Android versions. Changed to `pidof` without `-s` piped through `awk '{print $1}'`, with a `ps | grep` fallback for older devices. Gemini LOW #2.
+
+## 2026-03-10: Phase 5 Agents + Commands — Gemini Review Fixes
+
+### D78: Debugger agent must discover bundle ID before running commands
+The rn-debugger agent had no step for discovering the app's actual bundle ID or binary name. Commands used literal `com.example.app` and `YourApp` which an LLM would copy verbatim. Added Step 0 with explicit instructions to find these values from project config. Gemini HIGH #1.
+
+### D79: Maestro templates use placeholders, not example values
+Hardcoded `appId: com.example.app` in Maestro YAML templates caused LLMs to write that literal string into test files. Changed to `<app-bundle-id>` placeholder with unquoted heredoc (`<< EOF` not `<< 'EOF'`) so bash interpolation works when needed, plus explicit substitution instructions. Gemini MEDIUM #2.
+
+### D80: Android logcat command consistent across agents
+The rn-tester agent used a simpler `pidof` without error suppression or fallback, while rn-debugger had the robust version. Aligned both to use `2>/dev/null` + `ps | grep` fallback pattern. Gemini MEDIUM #3.
+
+## 2026-03-10: Phase 6 Polish + Speed — Gemini Review Fixes
+
+### D81: RN project detection checks package.json dependencies
+The SessionStart hook previously matched any project with `package.json` + `app.json`, causing false positives in Next.js and plain Node.js projects. Now checks for `"react-native"` or `"expo"` in package.json before triggering. Gemini HIGH #1.
+
+### D82: Snapshot subshell tolerates uiautomator dump failures
+`set -euo pipefail` caused the entire Android subshell to abort if `uiautomator dump` failed (e.g., UI busy). Added `|| true` so the Python fallback produces `[]` instead of a 0-byte file. Gemini HIGH #2.
+
+### D83: MCP server config uses CLAUDE_PLUGIN_ROOT for path resolution
+Relative paths like `scripts/cdp-bridge/dist/index.js` resolve against the user's project root, not the plugin root, when installed globally. Changed to `${CLAUDE_PLUGIN_ROOT}/scripts/cdp-bridge/dist/index.js`. Gemini HIGH #3.
+
+### D84: PID-suffixed temp file prevents concurrent snapshot race
+Hardcoded `/data/local/tmp/uidump.xml` could be overwritten by concurrent snapshot runs. Changed to `/data/local/tmp/uidump_$$.xml` (PID-suffixed) for uniqueness. Gemini MEDIUM #4.
+
+### D85: Marketplace JSON uses type instead of source for source kind
+`"source": "github"` was non-standard; changed to `"type": "github"` to match expected marketplace schema. Gemini MEDIUM #5.
+
+### D86: Auto-select first Android device when multiple connected
+When multiple Android devices/emulators are connected and `ANDROID_SERIAL` is not set, `adb` commands fail. Snapshot script now auto-exports `ANDROID_SERIAL` from first connected device. Gemini LOW #6.
+
+## 2026-03-10: Phase 7 — Expo/EAS Build Integration
+
+### D87: Two focused scripts over monolith or micro-scripts
+Three architecture options were evaluated: (1) single monolith script (~500 lines), (2) five micro-scripts, (3) two focused scripts. Option 3 chosen: `eas_resolve_artifact.sh` handles artifact resolution (cache → EAS servers → manual), `expo_ensure_running.sh` handles device lifecycle (install, launch, Metro). Each script has one clear responsibility without over-fragmentation.
+
+### D88: JSON stdout contract for all shell script output
+Both scripts output valid JSON on stdout for all exit paths (success, error, ambiguous). Diagnostics go to stderr. This allows LLM agents to reliably parse script output without fragile text parsing. Exit codes carry semantic meaning: 0=ok, 1=error, 2=ambiguous, 3=no CLI, 4=no config.
+
+### D89: EAS profile auto-selection by platform-specific criteria
+iOS profiles filtered by `ios.simulator == true`, Android by `android.buildType == "apk"`. If exactly one match: auto-select. If zero matches: fall back to "development" profile. If multiple matches: exit 2 with JSON list for user choice. Avoids ambiguity without requiring manual config.
+
+### D90: Three-tier artifact resolution (cache → EAS → manual)
+Local cache checked first (files matching profile+extension, <24h old) for instant resolution. EAS servers queried second via `eas build:list --json`. If both fail, error message instructs user to build or provide artifact path. Avoids unnecessary network calls when cached artifacts exist.
+
+### D91: select_profile writes to global variable, not subshell return
+Profile auto-selection functions `json_error` and `json_ambiguous` must write to stdout before exiting. Running them in a subshell (`PROFILE=$(select_profile)`) swallows their JSON output. Restructured to write directly to the global `PROFILE` variable. Gemini HIGH #2 fix.
+
+### D92: BSD find -maxdepth before -name
+macOS uses BSD `find` which requires global options (`-maxdepth`) before expression options (`-name`). GNU `find` is permissive but warns. Fixed ordering in `expo_ensure_running.sh` for cross-platform compatibility. Gemini MEDIUM #5 fix.
+
+### D93: Agent script invocation captures exit code with || true
+Bash `set -e` aborts on non-zero exit codes, but `eas_resolve_artifact.sh` uses exit code 2 for "ambiguous profiles" (not an error). Agent instructions changed to `RESULT=$(...) || EXIT_CODE=$?` pattern to capture all exit codes without aborting. Gemini MEDIUM #6 fix.
+
+### D94: Cache sorting uses ls -t for chronological ordering
+`sort -t/ -k999` attempted alphabetical sort by filename which doesn't reflect recency. Changed to `find ... -print0 | xargs -0 ls -t | head -1` for most-recently-modified-first ordering. Gemini LOW #8 fix.
+
+### D95: Removed timeout command, added --non-interactive flag
+macOS does not ship with GNU `timeout` (requires `brew install coreutils`). Removed `timeout 300` wrapper around `eas build:list` and added `--non-interactive` flag instead to prevent EAS CLI from prompting for input. Gemini HIGH #3 fix.
+
+### D96: Cache sorting uses find -exec stat instead of xargs ls -t
+On macOS BSD, `xargs` without `--no-run-if-empty` runs `ls -t` with no arguments when `find` returns nothing, listing the current directory's files instead. Replaced with `find -exec stat -f "%m %N" {} + | sort -rn | head -1 | cut -d' ' -f2-` which safely handles empty results. Gemini review round 2 HIGH #1.
+
+### D97: Agent logcat/log commands use non-blocking forms
+`adb logcat` and `xcrun simctl spawn booted log stream` run continuously and never exit, hanging the agent's Bash tool. Changed to `adb logcat -d` (dump and exit) and `log show --last 5m` (finite output). Gemini review round 2 HIGH #2.
+
+### D98: Empty APP_PID guard before logcat --pid
+If the app has crashed, `pidof` returns empty. `adb logcat --pid=` without a value fails. Added `[ -n "$APP_PID" ]` guard: use `--pid` if running, fall back to `adb logcat -d -b crash` if dead. Gemini review round 2 HIGH #3.
+
+### D99: Operator precedence fix in bundle ID resolution
+`[ -z "$BUNDLE_ID" ] && [ -f "app.config.js" ] || [ -f "app.config.ts" ]` evaluates left-to-right, causing false warning when BUNDLE_ID is set but app.config.ts exists. Fixed with curly brace grouping: `&& { [ -f ... ] || [ -f ... ]; }`. Gemini review round 2 MEDIUM #4.
+
+### D100: Agent JSON parsing falls back to node when jq unavailable
+Agent Step 0 bash examples used `jq -r '.path'` to parse script output, but the scripts themselves support jq-less environments via node fallback. Added `|| node -e "..."` fallback for consistency. Codex review MEDIUM #4.
+
+### D101: Removed overly broad cache fallback
+Cache check had a second `find` that matched any `.apk`/`.tar.gz` regardless of profile name. In a shared `/tmp/rn-eas-builds` directory used across multiple projects, this could return a different project's artifact. Removed the broad fallback — only profile-specific matches are returned. Codex review MEDIUM #1.
+
+### D102: JSON helpers escape special characters
+`json_ok()`, `json_error()` used raw `printf '%s'` which produced invalid JSON if paths contained quotes, backslashes, or newlines. Added `json_escape()` helper that escapes `\`, `"`, `\n`, `\t` before interpolation. Codex review MEDIUM #2.
+
+### D103: Launch failure warning instead of silent swallow
+`simctl launch` and `adb shell am start` failures were silently swallowed with `|| true`, causing `json_ok` to report success even when the app never launched. Changed to emit a stderr warning on launch failure so the agent knows to investigate. Codex review MEDIUM #3.
+
+### D104: Debugger agent includes EAS build path in Step 0
+The debugger agent only showed the local-build path for app installation, which could replace the exact EAS/preview binary the user is trying to debug. Added EAS artifact resolution branch mirroring the tester agent's Step 0. Codex review MEDIUM #5.
