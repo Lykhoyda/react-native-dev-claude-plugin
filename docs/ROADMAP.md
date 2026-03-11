@@ -103,7 +103,7 @@ rn-dev-agent/
 
 ---
 
-## MCP Tools (11 total)
+## MCP Tools (10 current, 14 after Phase 9)
 
 | Tool | Purpose | Source |
 |------|---------|--------|
@@ -329,11 +329,30 @@ Plugin manifests also corrected to match Claude Code schema (D112).
 
 ---
 
+## Phase 9: expo-mcp Patterns Port (2026-03-11)
+
+**Status: Spec & Plan Complete — Implementation Pending**
+
+Porting proven patterns from [expo/expo-mcp](https://github.com/expo/expo-mcp) into the plugin:
+
+| Capability | Tools | Status |
+|-----------|-------|--------|
+| Native device automation (XCTest iOS + ADB Android) | `automation_tap`, `automation_find`, `automation_screenshot` | Planned |
+| Multi-source log collection with factory pattern | `collect_logs` | Planned |
+| Image optimization pipeline (jimp-compact, 700KB target) | Internal utility | Planned |
+
+Design spec: `docs/superpowers/specs/2026-03-10-expo-mcp-patterns-port-design.md`
+Implementation plan: `docs/superpowers/plans/2026-03-10-expo-mcp-patterns-port.md`
+
+Codex review completed and all issues fixed in spec/plan (D113-D124).
+
+---
+
 ## Source Documents
 
 | Document | Contains |
 |----------|----------|
-| `rn-dev-agent-v2-architecture.md` | Complete architecture: plugin structure, full MCP server code (cdp-client.ts, injected-helpers.ts), all 11 tool definitions, agent prompts, skill content, edge case handling |
+| `rn-dev-agent-v2-architecture.md` | Complete architecture: plugin structure, full MCP server code (cdp-client.ts, injected-helpers.ts), all 10 tool definitions, agent prompts, skill content, edge case handling |
 | `rn-dev-agent-cli-research.md` | CLI speed research: screenshot benchmarks, maestro-runner vs Maestro, idb vs simctl analysis, uiautomator dump, snapshot_state.sh script, animation disabling, optimized testing loop timing |
 
 Both are in the project files and serve as the implementation reference.

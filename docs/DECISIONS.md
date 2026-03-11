@@ -367,3 +367,56 @@ Replaced `/tmp/rn-dev-agent` and `/tmp/rn-eas-builds` with `mktemp -d` + EXIT tr
 
 ### D112: Plugin manifests corrected to Claude Code schema
 Moved `marketplace.json` from repo root to `.claude-plugin/`. Fixed `source.type` → `source.source`, added required `owner` field, prefixed all component paths with `./` in `plugin.json`.
+
+## 2026-03-11: Codex Review Fixes (expo-mcp Port)
+
+### D113: iOS log predicate uses executable name, not bundle ID
+`processImagePath CONTAINS` filters by the binary path, which contains the executable name, not the bundle identifier. `IosLogCollector` now takes `executableName` instead of `bundleId`. Resolution chain: CDP → app.json name → derive from bundle ID → Expo Go fallback.
+
+### D114: XCTest uses XCUIApplication(bundleIdentifier:) for app-under-test
+`XCUIApplication()` without arguments launches the test host, not the app under test. Now passes `RN_AGENT_BUNDLE_ID` env var and Swift code uses `XCUIApplication(bundleIdentifier:)` when available.
+
+### D115: Replace BSD find with fs.readdirSync for xctestrun discovery
+`find -maxdepth` argument order differs between BSD (macOS) and GNU find. Replaced with `readdirSync` + `.find()` which is portable and avoids spawning a subprocess.
+
+### D116: Android appId passed to log collector for PID filtering
+`createCollectLogsHandler` now resolves `appId` via CDP when `native_android` source is requested, passing it to `AndroidLogCollector` for PID-based logcat filtering.
+
+### D117: parseLine() signature matches call site
+Fixed compile error: `parseLine(line, options)` call was missing the third `filterRegex` argument that the method signature requires.
+
+### D118: Promise.allSettled in CompositeLogCollector
+`Promise.all` causes all collectors to fail if one fails. `Promise.allSettled` lets working collectors return results even when one source is unavailable.
+
+### D119: Platform detection prefers CDP-connected device
+`AutomationFactory.setCdpPlatformHint()` allows CDP connection to inform platform auto-detection, avoiding mismatches when both iOS and Android devices are available.
+
+### D120: Cache key includes all XCTest source files
+`getSourceHash()` now hashes both `AutomationUITests.swift` and `Info.plist`, not just the Swift file. Prevents stale cache when only Info.plist changes.
+
+### D121: cropToElement bounds clamped to image dimensions
+If element bounds extend beyond the screenshot (e.g., partially offscreen), crop coordinates are clamped to prevent jimp from throwing. Returns original image if bounds are entirely outside.
+
+### D122: iOS build destination uses generic/platform=iOS Simulator
+`name=iPhone` is unstable across Xcode versions (iPhone 14 vs 15 vs 16). `generic/platform=iOS Simulator` builds for any simulator architecture without requiring a specific device name.
+
+### D123: Unique temp file names prevent concurrent access races
+Android screenshot and UI dump use `Date.now() + random suffix` for both device and local paths, preventing conflicts if multiple automation calls run concurrently.
+
+### D124: Filter regex validation before use
+User-provided filter patterns are wrapped in `try/catch` on `new RegExp()` to surface invalid regex errors early rather than crashing mid-collection.
+
+### D125: iOS log predicate uses ENDSWITH not CONTAINS (consistent with D74)
+`processImagePath CONTAINS` matches unrelated system processes with similar substrings. `ENDSWITH` is more precise and consistent with the D74 decision from Phase 5.
+
+### D126: XCTest uses activate() not launch() to preserve running app
+`XCUIApplication.launch()` terminates and relaunches the app, breaking the CDP WebSocket connection and losing JS state. Using `activate()` brings the app to foreground without relaunching. Only `launch()` if the app is in `.notRunning` state.
+
+### D127: Android device paths use /data/local/tmp/ not /sdcard/
+Newer Android API levels restrict `/sdcard/` write access for shell commands (scoped storage). `/data/local/tmp/` is consistently writable and matches the existing D45 convention.
+
+### D128: collect_logs gracefully handles disconnected CDP
+When `js_console` source is requested but CDP is not connected, the source is silently filtered out. If no sources remain, a structured error is returned explaining the requirement.
+
+### D129: CdpLogCollector maps CDP 'log' level to MCP 'info'
+CDP uses `log` for `console.log()` calls, but the MCP-facing level values are `info`/`warn`/`error`/`debug`. Added `log → info` mapping alongside existing `warning → warn`.
