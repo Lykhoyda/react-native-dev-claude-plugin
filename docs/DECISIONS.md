@@ -420,3 +420,32 @@ When `js_console` source is requested but CDP is not connected, the source is si
 
 ### D129: CdpLogCollector maps CDP 'log' level to MCP 'info'
 CDP uses `log` for `console.log()` calls, but the MCP-facing level values are `info`/`warn`/`error`/`debug`. Added `log → info` mapping alongside existing `warning → warn`.
+
+## 2026-03-11: E2E Testing Setup
+
+### D130: Test app inside plugin repo at test-app/
+Keeps test app and plugin code together for easier maintenance. The test app is a development/testing artifact, not a published package.
+
+### D131: Standalone Node.js harness over test framework
+A plain Node script that spawns the MCP server and calls tools via the MCP SDK client. No Jest/Vitest overhead — the tests are inherently sequential (one CDP connection) and don't benefit from a framework's parallel execution or watch mode.
+
+### D132: MSW in-app over external mock server
+MSW intercepts at the fetch level inside the app, matching the production app's testing pattern. No port conflicts, no extra process. MSW must initialize BEFORE the CDP bridge connects so the plugin's fetch hooks wrap MSW's patched fetch and observe both requests and synthetic responses. On RN >= 0.83 where CDP Network domain is used instead of fetch hooks, MSW-intercepted requests won't appear in network log — the harness accounts for this.
+
+### D133: Purpose-built screens over realistic app clone
+Each of the 8 screens targets specific MCP tools with deliberate testIDs and predictable state. This is a test fixture, not a demo app — simplicity enables reliable assertions.
+
+### D134: Harness does not boot the app
+The harness assumes the test app is already running on iOS Simulator with Metro. Separating app lifecycle from tool validation keeps the harness simple and avoids flaky simulator boot timing.
+
+### D135: Test app exposes global navigation ref and Redux store
+The test app sets `globalThis.__NAV_REF__` (React Navigation ref) and `globalThis.__REDUX_STORE__` (Redux store) in `__DEV__` mode. The harness uses `cdp_evaluate` to call `__NAV_REF__.navigate()` for screen transitions, avoiding the need for Maestro or UI interaction during tool validation.
+
+### D136: Fixed harness suite execution order
+Suites run in a deterministic order accounting for side effects: status → evaluate → component-tree → navigation → store-state → network-log → console-log → error-log → dev-settings → reload (last, resets all state). Each suite's preconditions are satisfied by the state left from preceding suites.
+
+### D137: Error Lab RedBox uses render-phase throw
+A simple `throw` in an event handler is caught by ErrorUtils and appears in error log but does NOT produce a RedBox. The Error Lab uses a state flag that conditionally renders a component throwing in its render method, producing a genuine React render-phase error. After this test, `cdp_reload` is required to recover.
+
+### D138: Harness suite timeout of 15 seconds
+Each suite has a 15-second timeout to prevent hangs from failed CDP connections or unresponsive tools. Matches the plugin's own 15-second reconnect timeout on reload.

@@ -348,6 +348,23 @@ Codex review completed and all issues fixed in spec/plan (D113-D124).
 
 ---
 
+## Phase 10: E2E Testing Setup (2026-03-11)
+
+**Status: Spec Complete — Implementation Pending**
+
+Purpose-built Expo test app + Node.js test harness to validate all 10 MCP tools against a real app on iOS Simulator.
+
+| Component | Description | Status |
+|-----------|-------------|--------|
+| Test app (8 screens) | Expo 54, React Navigation, Redux Toolkit, NativeWind, MSW | Planned |
+| Test harness (10 suites) | Node.js script, MCP SDK client, one suite per tool | Planned |
+
+Design spec: `docs/superpowers/specs/2026-03-11-testing-setup-design.md`
+
+Decisions: D130-D134.
+
+---
+
 ## Source Documents
 
 | Document | Contains |
