@@ -1,0 +1,21 @@
+{
+  "name": "rn-dev-agent-test-harness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/run.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/run.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
