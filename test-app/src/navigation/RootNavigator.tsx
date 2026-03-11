@@ -9,6 +9,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import ReloadTestScreen from '../screens/ReloadTestScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ErrorLabModal from '../screens/ErrorLabModal';
+import DeepLinkScreen from '../screens/DeepLinkScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
@@ -66,6 +67,7 @@ const linking = {
           },
         },
       },
+      DeepLink: 'deeplink',
     },
   },
 };
@@ -75,6 +77,7 @@ export default function RootNavigator() {
     <RootStack.Navigator>
       <RootStack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
       <RootStack.Screen name="ErrorLab" component={ErrorLabModal} options={{ presentation: 'modal', title: 'Error Lab' }} />
+      <RootStack.Screen name="DeepLink" component={DeepLinkScreen} options={{ title: 'Deep Link' }} />
     </RootStack.Navigator>
   );
 }
