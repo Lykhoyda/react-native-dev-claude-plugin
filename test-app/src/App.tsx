@@ -6,6 +6,9 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { store, persistor } from './store';
 import RootNavigator, { linking } from './navigation/RootNavigator';
 import type { RootStackParams } from './navigation/types';
+import { server } from './mocks/server';
+
+server.listen({ onUnhandledRequest: 'bypass' });
 
 const navigationRef = createNavigationContainerRef<RootStackParams>();
 
