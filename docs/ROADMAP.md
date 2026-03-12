@@ -526,3 +526,123 @@ Both are in the project files and serve as the implementation reference.
 | cdp_network_log | 1 | 1 | 1 | 1 |
 
 **Total:** 28 calls, 971ms, 20.3KB data. 25 ok, 3 warnings, 0 failures.
+
+## Phase 15: rn-feature-dev Command (Complete)
+
+**Status:** Complete (2026-03-12)
+
+Adapted the official feature-dev plugin workflow for React Native development, adding live device verification after implementation.
+
+### Deliverables
+
+1. **`commands/rn-feature-dev.md`** — 8-phase orchestrating command (Phases 1–7 + 5.5 Live Verification)
+2. **`agents/rn-code-explorer.md`** — RN-aware codebase analysis agent (testID inventory, route/store/API mapping)
+3. **`agents/rn-code-architect.md`** — RN-aware architecture design agent (with mandatory Verification Parameters output)
+4. **`agents/rn-code-reviewer.md`** — RN-aware code quality reviewer (testID coverage, `__DEV__` guards, Zustand exposure)
+5. **`agents/rn-tester.md`** — Extended with Verification Checkpoint section for medium-depth live checks
+
+### Architecture Decisions (D187-D191)
+- D187: Self-orchestrating command (no `agent:` field) — launches different agents per phase
+- D188: Three RN-adapted agents with `rn-` prefix to avoid collisions with official plugin
+- D189: Architect blueprint includes Verification Parameters for mechanical Phase 5.5
+- D190: Phase 5.5 inline in command (5 CDP calls + screenshot, not a separate skill)
+- D191: Code agents get analysis-only tools — no device access or repo mutation
+
+### Workflow
+```
+User: /rn-dev-agent:rn-feature-dev "add cart badge"
+  Phase 1: Discovery — clarify requirements
+  Phase 2: Exploration — 2-3 rn-code-explorer agents in parallel
+  Phase 3: Clarifying Questions — surface gaps, wait for answers
+  Phase 4: Architecture — rn-code-architect agent → blueprint with Verification Parameters
+  Phase 5: Implementation — follow blueprint, save files, Fast Refresh
+  Phase 5.5: Live Verification — screenshot + cdp_status + cdp_component_tree + cdp_store_state + cdp_error_log
+  Phase 6: Quality Review — 2-3 rn-code-reviewer agents in parallel
+  Phase 7: Summary — document results, suggest /test-feature for full E2E
+```
+
+## Phase 16: rn-feature-dev Benchmark — Notification Feature (Complete)
+
+**Status:** Complete (2026-03-12)
+
+End-to-end benchmark of the `rn-feature-dev` command: used it to implement a notification badge + detail view feature in the test app, exercising all 11 CDP tools during Phase 5.5 live verification.
+
+### Feature Implemented
+- Unread count badge on Notifications tab icon
+- Tappable notification items → NotificationDetail screen
+- "Mark as Read" button on detail screen (dispatches markRead action)
+- "Clear All" button on notifications list (dispatches clearAll action)
+- NotificationsTab wrapped in stack navigator (matches HomeTab/ProfileTab pattern)
+- Deep link: `rndatest://notification/:id`
+
+### CDP Tool Benchmark Results (All 11 Tools)
+| Tool | Result | What It Proved |
+|------|--------|----------------|
+| cdp_status | PASS | Health check: Metro, CDP, no errors |
+| cdp_navigation_state | PASS | Route tracking: NotificationsMain → NotificationDetail |
+| cdp_component_tree | PASS | UI verification: all testIDs found in tree |
+| cdp_store_state | PASS | State verification: notifications slice shape, unreadCount |
+| cdp_console_log | PASS | Log capture: 5 entries across log/warn/error levels |
+| cdp_network_log | PASS | Network capture: POST /api/notifications/read |
+| cdp_error_log | PASS | Regression check: 0 new errors |
+| cdp_evaluate | PASS | Direct JS execution: dispatched markRead via store |
+| cdp_interact | PASS | UI interaction: pressed notif-item-0, pressed mark-read-btn |
+| cdp_reload | PASS | Full reload with auto-reconnect and helper re-injection |
+| cdp_dev_settings | WARN | Pre-existing: dismissRedBox not available in Expo Go |
+
+### Agents Used
+- rn-code-explorer: Mapped notifications area, navigation, store, testIDs
+- rn-code-architect: (blueprint created inline due to scope clarity)
+- rn-code-reviewer: Found 6 issues (2 fixed, 4 intentional test patterns)
+
+### Decisions (D196-D198)
+- D196: Wrap NotificationsTab in stack navigator
+- D197: Derive unreadCount from items (not duplicated state)
+- D198: Tab badge driven by Redux selector
+
+## Phase 17: Gemini + Codex Review Fixes Round 2 (Complete)
+
+**Status:** Complete (2026-03-12)
+
+Fixed 10 issues identified by parallel Gemini + Codex reviews of the rn-feature-dev command and notification benchmark.
+
+### Fixes Applied
+| # | Severity | Fix | Decision |
+|---|----------|-----|----------|
+| 1 | HIGH | Phase 5.5 Step 0 uses `cdp_evaluate` navigation instead of deep links (B56) | D199 |
+| 2 | HIGH | rn-tester Verification Checkpoint adds navigation step | D204 |
+| 3 | CRITICAL | Phase 5.5 adds Step 3.5 interaction verification via `cdp_interact` | D201 |
+| 4 | IMPORTANT | Step 0 detects simulator before navigation attempt | D200 |
+| 5 | IMPORTANT | Phase 6 skips prompt when no findings | D202 |
+| 6 | IMPORTANT | rn-code-reviewer console.log severity unified to Important | D203 |
+| 7 | IMPORTANT | NotificationsTab gets `tabBarTestID` | D205 |
+| 8 | MEDIUM | NotificationsScreen uses `selectUnreadCount` selector | D206 |
+| 9 | MEDIUM | rn-tester checkpoint fixes copy-paste text | D204 |
+| 10 | MEDIUM | rn-tester checkpoint table adds Navigation row | D204 |
+
+### Decisions (D199-D206)
+- D199: Phase 5.5 uses cdp_evaluate navigation instead of deep links
+- D200: Phase 5.5 detects simulator before navigation attempt
+- D201: Phase 5.5 includes interaction verification step
+- D202: Phase 6 skips "which to fix" prompt when no findings
+- D203: rn-code-reviewer console.log severity unified
+- D204: rn-tester Verification Checkpoint navigation + text fixes
+- D205: NotificationsTab tabBarTestID
+- D206: NotificationsScreen uses selectUnreadCount
+
+## Phase 18: Self-Evaluator Protocol (Complete)
+
+**Status:** Complete (2026-03-12)
+
+Development-time evaluation protocol that captures structured data during
+`rn-feature-dev` runs and produces reports in `docs/reports/`.
+
+### Deliverables
+- `dev/evaluator.md` — evaluation protocol (not shipped to users)
+- `docs/reports/` — report output directory
+- Evaluator references in all 8 phases of `commands/rn-feature-dev.md`
+
+### Decisions (D207-D209)
+- D207: Evaluator lives in dev/, outside plugin manifest
+- D208: Inline capture during rn-feature-dev, not post-run analysis
+- D209: Confidence-gated bug logging to BUGS.md

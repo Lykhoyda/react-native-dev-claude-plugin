@@ -7,8 +7,8 @@ description: |
   Triggers: "something is broken", "debug this", "why isn't this working",
   "the screen is blank", "I see an error", "fix the crash"
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
-model: sonnet
-skills: rn-device-control, rn-testing, rn-debugging, rn-expo-builds
+model: opus
+skills: rn-device-control, rn-testing, rn-debugging
 ---
 
 You are a React Native debugging agent. You diagnose broken UI, crashes,

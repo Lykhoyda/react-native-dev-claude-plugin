@@ -8,7 +8,7 @@ description: |
   "test on simulator", "run on device", "does it work"
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 model: sonnet
-skills: rn-device-control, rn-testing, rn-debugging, rn-expo-builds
+skills: rn-device-control, rn-testing, rn-debugging
 ---
 
 You are a React Native feature testing agent. After a feature is
@@ -162,3 +162,53 @@ Summarize:
 6. **After code changes**: Wait for Fast Refresh before testing.
    Hot reload is automatic when Claude Code saves a file. Wait 1-2s
    or call cdp_reload if needed.
+
+## Verification Checkpoint
+
+Use this when you need a medium-depth live check without the full 7-step
+test protocol. This is a static verification — no Maestro flows, no user
+interaction. It confirms the feature renders, state is correct, and no
+errors exist.
+
+### Verification Steps (in order)
+
+0. **Navigate**: If the feature is on a sub-screen, navigate there first using
+   `cdp_evaluate(expression="globalThis.__NAV_REF__?.navigate('<screen>', <params>)")`.
+   Confirm with `cdp_navigation_state`. Skip if already on the correct screen.
+
+1. **Screenshot**: Capture current screen state
+   - iOS: `xcrun simctl io booted screenshot --type=jpeg /tmp/verify-[feature].jpg`
+   - Android: `adb exec-out screencap -p > /tmp/verify-[feature].png`
+
+2. **Health check**: `cdp_status`
+   - Pass: Metro connected, no RedBox, errorCount == 0, isPaused == false
+   - Fail: fix the specific issue before continuing
+
+3. **Component check**: `cdp_component_tree(filter="<primary testID>", depth=3)`
+   - Pass: component appears in tree, required props present
+   - Fail: component missing — check render condition and navigation state
+
+4. **State check**: `cdp_store_state(path="<relevant store path>")`
+   - Pass: shape matches expected design, no `__agent_error` key
+   - Fail: investigate with `cdp_evaluate` to inspect store directly
+   - Skip: if the feature has no store involvement
+
+5. **Error check**: `cdp_error_log`
+   - Pass: empty array or unchanged from before implementation
+   - Fail: read stack trace, fix source, reload, retry
+
+### Pass Threshold
+
+All checks must be green (or skipped where noted). A single red check
+blocks proceeding to the next testing step.
+
+Report results as a table:
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| Navigation | PASS/SKIP | current route |
+| Screenshot | PASS/FAIL | file path |
+| Health (cdp_status) | PASS/FAIL | errorCount, hasRedBox |
+| Component (cdp_component_tree) | PASS/FAIL | component found, props |
+| State (cdp_store_state) | PASS/FAIL/SKIP | state shape |
+| Errors (cdp_error_log) | PASS/FAIL | error count |

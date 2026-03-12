@@ -11,10 +11,15 @@ export type ProfileStackParams = {
   ReloadTest: undefined;
 };
 
+export type NotificationsStackParams = {
+  NotificationsMain: undefined;
+  NotificationDetail: { id: string };
+};
+
 export type TabParams = {
   HomeTab: NavigatorScreenParams<HomeStackParams>;
   ProfileTab: NavigatorScreenParams<ProfileStackParams>;
-  NotificationsTab: undefined;
+  NotificationsTab: NavigatorScreenParams<NotificationsStackParams>;
 };
 
 export type RootStackParams = {

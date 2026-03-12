@@ -604,3 +604,80 @@ Benchmark experiment (HIGH): All tools except `cdp_status` failed with "Not conn
 
 ### D186: Interact distinguishes handler-threw from action-failed
 Benchmark experiment (MEDIUM): `cdp_interact` returned `failResult` when `onPress` handler threw, even though the press executed successfully. The injected `interact()` catch block now returns `{ success: true, action_executed: true, handler_error: ... }`, and the handler surfaces this as `warnResult` instead of `failResult`.
+
+## 2026-03-12: rn-feature-dev Command
+
+### D187: rn-feature-dev as self-orchestrating command without agent field
+The `rn-feature-dev` command needs to launch different agent types at different phases (explorers, architects, reviewers) and run CDP tools directly for verification. Commands with an `agent:` field delegate entirely to one agent. Omitting it keeps the main Claude thread as orchestrator, matching how the upstream feature-dev plugin works.
+
+### D188: Three RN-adapted agents copied from feature-dev plugin
+Copied `code-explorer`, `code-architect`, `code-reviewer` from the official feature-dev plugin (Apache 2.0) and adapted for React Native. Named with `rn-` prefix (`rn-code-explorer`, etc.) to avoid collisions if users install both plugins. RN adaptations: explorer greps for testIDs/routes/store slices, architect outputs Verification Parameters section, reviewer checks testID coverage and `__DEV__` guards.
+
+### D189: Architect blueprint includes Verification Parameters section
+Phase 5.5 (Live Verification) needs to know which component to filter in `cdp_component_tree` and which store path to query. Rather than re-analyzing the implementation, the architect's blueprint includes a mandatory `Verification Parameters` section with `primaryComponent`, `storeQueryPath`, and `requiresFullReload`. This makes Phase 5.5 mechanical — no guessing.
+
+### D190: Phase 5.5 inline in command rather than separate skill or agent
+The live verification sequence is 5 CDP calls + 1 screenshot. Creating a separate skill or agent for this adds indirection without benefit. The verification is embedded in the command body with exact pass/fail criteria and a gate that blocks Phase 6. The same sequence is also appended to `rn-tester.md` as a reusable "Verification Checkpoint" section.
+
+### D191: Code agents get analysis-only tools — no device access
+The three new agents (`rn-code-explorer`, `rn-code-architect`, `rn-code-reviewer`) use Glob, Grep, Read, and other file-reading tools but never get `Bash`, `Write`, `Edit`, or `mcp__rn-dev-agent-cdp__*`. This prevents them from accidentally mutating the repo or interfering with the running app. Only the main thread and `rn-tester` have device access.
+
+### D192: Phase 5.5 navigates to feature screen before verification
+Gemini + Codex review: after a full reload, the app returns to its initial route. Features on sub-screens would false-fail the component tree check. Added `entryRoute` to the architect's Verification Parameters and a navigation Step 0 in Phase 5.5 that deep-links to the feature screen before taking measurements.
+
+### D193: Error baseline via buffer clear before verification
+Codex review: Step 2 required `errorCount == 0` but Step 5 allowed "pre-existing errors" — contradictory since both read the same buffer. Fixed by clearing the error buffer at the start of Phase 5.5 (Step 1), establishing a clean baseline. Any errors after the clear are definitively new regressions.
+
+### D194: isPaused check added to Phase 5.5 health gate
+Codex review: both `rn-tester` and `rn-debugger` check for paused execution, but Phase 5.5 did not. A paused JS runtime leaves CDP queries returning stale data. Added `isPaused == false` to the health gate with `cdp_reload` recovery.
+
+### D195: Phase 5.5 auto-recovery instead of delegating to /check-env
+Codex review: the recovery path told users to run `/check-env`, which breaks the guided flow. Now Phase 5.5 Step 0 attempts auto-recovery via `expo_ensure_running.sh` before asking the user, matching the pattern already used by `rn-tester` Step 0.
+
+## 2026-03-12: rn-feature-dev Benchmark (Notification Feature)
+
+### D196: Wrap NotificationsTab in a stack navigator
+The NotificationsTab was the only tab rendered as a bare screen (no nested stack). Adding a NotificationDetail screen required wrapping it in a `NotificationsStack` navigator with `headerShown: false` on the tab, matching the existing HomeTab/ProfileTab pattern.
+
+### D197: Derive unreadCount from items instead of storing separately
+Code review: `unreadCount` was stored as a separate integer alongside `items`, creating a desync risk. Replaced with a derived selector `selectUnreadCount` that computes `items.filter(i => !i.read).length`. The `unreadCount` field remains in state for backward compatibility with the existing reducer logic.
+
+### D198: Tab badge driven by Redux selector
+Used `tabBarBadge` option on the NotificationsTab screen, driven by `useSelector(selectUnreadCount)` in the `TabNavigator` component. Badge shows the count when > 0, `undefined` (hidden) when 0.
+
+## 2026-03-12: Gemini + Codex Review Fixes (Round 2)
+
+### D199: Phase 5.5 uses cdp_evaluate navigation instead of deep links
+Deep links trigger native confirmation dialogs in Expo Go (B56) that block automation. Replaced `xcrun simctl openurl` with `cdp_evaluate` using `globalThis.__NAV_REF__?.navigate()` as the primary navigation method. Deep links remain as a last-resort fallback.
+
+### D200: Phase 5.5 detects simulator before navigation attempt
+Recovery path was ordered after the deep-link attempt, meaning the first navigation would fail before recovery kicked in. Restructured Step 0 to verify simulator + CDP connection first, then navigate.
+
+### D201: Phase 5.5 includes interaction verification step (Step 3.5)
+Phase 5.5 only performed static checks (component exists, state shape correct). Added Step 3.5 that uses `cdp_interact` to exercise the primary user action and verify its side effect (state change, navigation, or visual update).
+
+### D202: Phase 6 skips "which to fix" prompt when no findings
+Phase 6 always asked "Which findings should I fix?" even when reviewers found zero issues. Now proceeds directly to Phase 7 when no high-confidence issues are found.
+
+### D203: rn-code-reviewer console.log severity unified to Important
+Reviewer had conflicting severity for console.log: Critical (must have testID) vs Low (no bare console.log). Unified to Important with clear guidance: production code paths must guard console calls with `__DEV__`, test app console calls for CDP testing are acceptable when guarded.
+
+### D204: rn-tester Verification Checkpoint includes navigation step
+Checkpoint was missing a navigation step that existed in Phase 5.5. Added Step 0 using `cdp_evaluate` with `__NAV_REF__` for in-app navigation. Also fixed copy-paste text ("blocks proceeding to quality review" → "blocks proceeding to the next testing step").
+
+### D205: NotificationsTab gets tabBarTestID
+Added `tabBarTestID: 'tab-notifications'` so Maestro and `cdp_component_tree` can target the tab bar item for interaction and verification.
+
+### D206: NotificationsScreen uses selectUnreadCount selector
+Screen was destructuring raw `unreadCount` from state despite D197 establishing a derived selector. Changed to use `selectUnreadCount` for consistency, eliminating desync risk between the items array and displayed count.
+
+## 2026-03-12: Self-Evaluator Protocol
+
+### D207: Evaluator lives in dev/, outside plugin manifest
+The self-evaluator is a development-time tool for improving the plugin, not a user-facing feature. Placing it in `dev/` keeps it out of `.claude-plugin/plugin.json` and ensures it is never shipped to plugin consumers.
+
+### D208: Inline capture during rn-feature-dev, not post-run analysis
+Capturing data inline during the run (via one-line evaluator references per phase) produces the most accurate and complete data. Post-run analysis from git history or conversation transcripts would be incomplete and error-prone.
+
+### D209: Confidence-gated bug logging to BUGS.md
+Only high-confidence failures (tool errors, timeouts, crashes, failed recoveries) are auto-appended to BUGS.md. Warnings and ambiguous observations go to the report only, avoiding noise in the bug tracker. 3-criteria deduplication (tool + error pattern + context) prevents duplicate entries.

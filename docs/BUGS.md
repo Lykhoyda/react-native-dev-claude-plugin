@@ -192,3 +192,9 @@
 
 ### B45: evaluateAsync timeout can exceed stated 5s cap (MEDIUM)
 **File:** cdp-client.ts:241-265. Each poll can take 2s, total wall-clock time exceeds the 5s guarantee.
+
+### B56: Expo Go deep link confirmation dialog blocks automated verification (MEDIUM)
+**Context:** When `xcrun simctl openurl booted "rndatest://..."` is used to navigate, iOS shows a native "Open in Expo Go?" or "Open in rn-dev-agent-test?" confirmation dialog. This dialog cannot be dismissed programmatically via simctl, AppleScript (without assistive access), or CDP. It blocks the deep link from executing, leaving the agent unable to navigate. Workaround: use `cdp_evaluate` with `globalThis.__NAV_REF__?.navigate(...)` for in-app navigation instead of deep links. Long-term fix: detect the dialog via screenshot analysis or use Maestro's `tapOn` to dismiss it.
+
+### B57: cdp_dev_settings dismissRedBox fails in Expo Go (LOW)
+**Context:** All 4 fallback approaches for `dismissRedBox` fail in Expo Go because the `DevSettings` module is not directly accessible via `__turboModuleProxy` or `NativeModules` in the Expo Go sandbox. This only affects Expo Go — dev builds with native modules should work. Pre-existing limitation, not a regression.

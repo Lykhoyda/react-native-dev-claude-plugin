@@ -26,13 +26,17 @@
   ],
   "agents": [
     "./agents/rn-tester.md",
-    "./agents/rn-debugger.md"
+    "./agents/rn-debugger.md",
+    "./agents/rn-code-explorer.md",
+    "./agents/rn-code-architect.md",
+    "./agents/rn-code-reviewer.md"
   ],
   "commands": [
     "./commands/test-feature.md",
     "./commands/debug-screen.md",
     "./commands/check-env.md",
-    "./commands/build-and-test.md"
+    "./commands/build-and-test.md",
+    "./commands/rn-feature-dev.md"
   ],
   "mcpServers": {
     "rn-dev-agent-cdp": {

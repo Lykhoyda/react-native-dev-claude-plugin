@@ -36,8 +36,16 @@ const notificationsSlice = createSlice({
         state.unreadCount = Math.max(0, state.unreadCount - 1);
       }
     },
+    clearAll: (state) => {
+      state.items = [];
+      state.unreadCount = 0;
+    },
   },
 });
 
-export const { markAllRead, markRead } = notificationsSlice.actions;
+export const { markAllRead, markRead, clearAll } = notificationsSlice.actions;
+
+export const selectUnreadCount = (state: { notifications: NotificationsState }) =>
+  state.notifications.items.filter((i) => !i.read).length;
+
 export default notificationsSlice;

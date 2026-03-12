@@ -1,13 +1,22 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import type { RootStackParams, TabParams, HomeStackParams, ProfileStackParams } from './types';
+import { useSelector } from 'react-redux';
+import type {
+  RootStackParams,
+  TabParams,
+  HomeStackParams,
+  ProfileStackParams,
+  NotificationsStackParams,
+} from './types';
+import { selectUnreadCount } from '../store/slices/notificationsSlice';
 import HomeScreen from '../screens/HomeScreen';
 import FeedScreen from '../screens/FeedScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ReloadTestScreen from '../screens/ReloadTestScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 import ErrorLabModal from '../screens/ErrorLabModal';
 import DeepLinkScreen from '../screens/DeepLinkScreen';
 
@@ -15,6 +24,7 @@ const RootStack = createNativeStackNavigator<RootStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
 const HomeStack = createNativeStackNavigator<HomeStackParams>();
 const ProfileStack = createNativeStackNavigator<ProfileStackParams>();
+const NotificationsStack = createNativeStackNavigator<NotificationsStackParams>();
 
 function HomeStackNavigator() {
   return (
@@ -35,11 +45,39 @@ function ProfileStackNavigator() {
   );
 }
 
+function NotificationsStackNavigator() {
+  return (
+    <NotificationsStack.Navigator>
+      <NotificationsStack.Screen
+        name="NotificationsMain"
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
+      />
+      <NotificationsStack.Screen
+        name="NotificationDetail"
+        component={NotificationDetailScreen}
+        options={{ title: 'Detail' }}
+      />
+    </NotificationsStack.Navigator>
+  );
+}
+
 function TabNavigator() {
+  const unreadCount = useSelector(selectUnreadCount);
+
   return (
     <Tab.Navigator>
       <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ headerShown: false, title: 'Home' }} />
-      <Tab.Screen name="NotificationsTab" component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <Tab.Screen
+        name="NotificationsTab"
+        component={NotificationsStackNavigator}
+        options={{
+          headerShown: false,
+          title: 'Notifications',
+          tabBarTestID: 'tab-notifications',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+        }}
+      />
       <Tab.Screen name="ProfileTab" component={ProfileStackNavigator} options={{ headerShown: false, title: 'Profile' }} />
     </Tab.Navigator>
   );
@@ -57,7 +95,12 @@ const linking = {
               Feed: 'feed',
             },
           },
-          NotificationsTab: 'notifications',
+          NotificationsTab: {
+            screens: {
+              NotificationsMain: 'notifications',
+              NotificationDetail: 'notification/:id',
+            },
+          },
           ProfileTab: {
             screens: {
               ProfileMain: 'profile',
