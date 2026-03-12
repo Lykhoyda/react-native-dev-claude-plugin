@@ -1,7 +1,7 @@
 ---
 command: rn-feature-dev
 description: Guided feature development for React Native — explore codebase, design architecture, implement, verify live on device, and review quality.
-argument-hint: Feature description
+argument-hint: [feature-description]
 ---
 
 # React Native Feature Development

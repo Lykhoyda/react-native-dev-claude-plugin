@@ -1,3 +1,8 @@
+---
+name: rn-device-control
+description: This skill should be used when the user asks to "control the simulator", "take a screenshot", "boot the emulator", "install the app", "read UI hierarchy", "manage device state", "open a deep link", "grant permissions", "stream native logs", or needs guidance on xcrun simctl, adb commands, screenshot capture, Expo/EAS builds, or device lifecycle management for React Native testing.
+---
+
 # rn-device-control — Device Lifecycle and State Extraction
 
 Commands for controlling iOS Simulator and Android Emulator, taking screenshots,

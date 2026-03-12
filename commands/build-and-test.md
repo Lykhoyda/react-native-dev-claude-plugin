@@ -1,10 +1,12 @@
 ---
 command: build-and-test
 description: Build the Expo/React Native app (local or EAS), install on simulator/emulator, start Metro, then test the specified feature end-to-end.
+argument-hint: [--eas profile] [feature-description]
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 agent: rn-tester
 ---
 
-Build the app and then test the specified feature on the simulator/emulator.
+Build the app and test this feature: $ARGUMENTS
 
 ## Usage
 

@@ -5,9 +5,29 @@ description: |
   screens, components, state management, navigation, and API layers.
   Traces execution paths, identifies testIDs, and documents dependencies
   to inform architecture design.
-tools: Glob, Grep, LS, Read, WebFetch, TodoWrite, WebSearch
+  Triggers: "explore the codebase", "how does this feature work", "map the screens",
+  "trace the data flow", "find all testIDs", "what components exist"
+
+  <example>
+  Context: User wants to understand how a feature is implemented
+  user: "how does the notification system work in this app?"
+  assistant: "I'll launch the rn-code-explorer agent to trace the notification implementation across screens, store, and API layers."
+  <commentary>
+  Understanding an existing feature requires tracing through multiple code layers — screens, components, state, navigation.
+  </commentary>
+  </example>
+
+  <example>
+  Context: User needs to find all testIDs and routes before writing tests
+  user: "map out all the screens and testIDs in the app"
+  assistant: "I'll use the rn-code-explorer agent to scan the codebase for screens, routes, and testID coverage."
+  <commentary>
+  Mapping testIDs and routes across an entire app requires systematic codebase analysis.
+  </commentary>
+  </example>
+tools: Glob, Grep, LS, Read
 model: sonnet
-skills: rn-device-control, rn-testing, rn-debugging
+skills: rn-testing
 color: yellow
 ---
 

@@ -4,9 +4,29 @@ description: |
   Designs implementation blueprints for React Native features by analyzing
   existing codebase patterns, then providing specific files to create/modify,
   component designs, testID placement, store slice design, and build sequences.
-tools: Glob, Grep, LS, Read, WebFetch, TodoWrite, WebSearch
+  Triggers: "design the architecture", "plan the implementation", "create a blueprint",
+  "what files do I need", "design the store slice", "plan the component structure"
+
+  <example>
+  Context: User wants to plan a new feature before implementing
+  user: "design the architecture for a shopping cart feature"
+  assistant: "I'll launch the rn-code-architect agent to analyze existing patterns and create a comprehensive implementation blueprint."
+  <commentary>
+  New feature needs an architecture blueprint with file list, component design, store slices, and build sequence.
+  </commentary>
+  </example>
+
+  <example>
+  Context: User needs a blueprint for modifying existing functionality
+  user: "plan how to add real-time sync to the tasks screen"
+  assistant: "I'll use the rn-code-architect agent to design the sync architecture based on existing codebase patterns."
+  <commentary>
+  Extending existing functionality requires understanding current patterns before designing the addition.
+  </commentary>
+  </example>
+tools: Glob, Grep, LS, Read
 model: opus
-skills: rn-device-control, rn-testing, rn-debugging
+skills: rn-testing
 color: green
 ---
 

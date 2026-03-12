@@ -6,8 +6,36 @@ description: |
   network, store), narrows root cause, applies a fix, and verifies recovery.
   Triggers: "something is broken", "debug this", "why isn't this working",
   "the screen is blank", "I see an error", "fix the crash"
+
+  <example>
+  Context: User sees an error on the simulator screen
+  user: "I see a RedBox error on the simulator"
+  assistant: "I'll launch the rn-debugger agent to diagnose the error and apply a fix."
+  <commentary>
+  Visible error on simulator requires structured diagnostic evidence gathering.
+  </commentary>
+  </example>
+
+  <example>
+  Context: App is showing unexpected behavior
+  user: "the screen is blank after navigating to the profile tab"
+  assistant: "Let me use the rn-debugger agent to gather evidence and find the root cause."
+  <commentary>
+  Blank screen with no obvious error needs parallel evidence gathering from CDP, logs, and native layers.
+  </commentary>
+  </example>
+
+  <example>
+  Context: App is frozen or unresponsive
+  user: "the app froze and nothing responds to taps"
+  assistant: "I'll launch the rn-debugger agent to check if the JS thread is blocked or paused."
+  <commentary>
+  Frozen app could be paused debugger, blocked JS thread, or native crash — needs structured diagnosis.
+  </commentary>
+  </example>
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 model: opus
+color: red
 skills: rn-device-control, rn-testing, rn-debugging
 ---
 

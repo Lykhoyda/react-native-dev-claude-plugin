@@ -28,6 +28,7 @@ Available commands:
   /rn-dev-agent:build-and-test <description> - Build app, then test feature
   /rn-dev-agent:debug-screen                - Diagnose and fix the current screen
   /rn-dev-agent:check-env                   - Verify environment is ready
+  /rn-dev-agent:rn-feature-dev <description> - Guided feature development (explore, design, implement, verify)
 
 Use build-and-test if the app isn't installed yet. Metro starts automatically.
 EOF

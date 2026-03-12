@@ -1,3 +1,8 @@
+---
+name: rn-debugging
+description: This skill should be used when the user asks to "debug the app", "fix a crash", "diagnose a blank screen", "read error logs", "troubleshoot CDP connection", "check Metro status", "find native crashes", "inspect network failures", or needs guidance on CDP vs bash debugging, error type identification, connection troubleshooting, or post-reload readiness for React Native apps.
+---
+
 # rn-debugging — CDP Usage, Error Identification, and Connection Troubleshooting
 
 How to diagnose problems in React Native apps using the CDP MCP server,

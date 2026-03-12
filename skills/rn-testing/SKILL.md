@@ -1,3 +1,8 @@
+---
+name: rn-testing
+description: This skill should be used when the user asks to "write a Maestro test", "create E2E flows", "add testIDs", "run UI tests", "set up maestro-runner", "mock network requests", "inspect store state", "write test assertions", or needs guidance on test timing rules, flow structure, multi-device testing, network mocking, Zustand inspection, or component tree queries for React Native apps.
+---
+
 # rn-testing — Maestro Patterns, Timing Rules, and Test Strategy
 
 How to write and run UI test flows for React Native feature verification.

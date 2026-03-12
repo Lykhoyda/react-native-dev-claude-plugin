@@ -6,8 +6,36 @@ description: |
   Use when a feature has been implemented and needs verification.
   Triggers: "test this feature", "verify it works", "check the implementation",
   "test on simulator", "run on device", "does it work"
+
+  <example>
+  Context: User just finished implementing a feature
+  user: "test this feature on the simulator"
+  assistant: "I'll use the rn-tester agent to verify the feature works on the running simulator."
+  <commentary>
+  Feature implementation is complete and needs live verification on device.
+  </commentary>
+  </example>
+
+  <example>
+  Context: User wants to verify a specific user flow
+  user: "verify the login flow works — enter credentials, tap sign in, see the home screen"
+  assistant: "I'll launch the rn-tester agent to walk through the login flow and verify each step."
+  <commentary>
+  User described a multi-step flow that needs end-to-end verification on a real device.
+  </commentary>
+  </example>
+
+  <example>
+  Context: User asks if something works after a code change
+  user: "does the cart badge update when I add items?"
+  assistant: "Let me use the rn-tester agent to test the add-to-cart flow and check the badge."
+  <commentary>
+  User is asking whether a feature works correctly, which requires live device testing.
+  </commentary>
+  </example>
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 model: sonnet
+color: cyan
 skills: rn-device-control, rn-testing, rn-debugging
 ---
 
