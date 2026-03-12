@@ -668,3 +668,66 @@ Fixed 5 issues from parallel Gemini + Codex reviews of the self-evaluator and re
 - D212: Evaluator Phase 7 checks Phase 6 deferred findings
 - D213: Evaluator increments agent counters
 - D214: Evaluator increments phases_completed before writing
+
+## Phase 20: Tasks Tab Feature — Test App (Complete)
+
+**Status:** Complete (2026-03-12)
+
+Implemented a new "Tasks" tab in the test app using the full rn-feature-dev 8-phase workflow. The feature adds inline task creation, completion toggling, deletion, filter chips (All/Active/Done), active task count badge on the tab bar, and sync with rollback on failure.
+
+### Files
+| File | Action |
+|------|--------|
+| `src/store/slices/tasksSlice.ts` | CREATE — Redux slice with 6 reducers, memoized selectors |
+| `src/screens/TasksScreen.tsx` | CREATE — Full screen with input, filters, FlatList, sync |
+| `src/store/index.ts` | MODIFY — Register tasks reducer |
+| `src/navigation/types.ts` | MODIFY — Add TasksStackParams + TasksTab |
+| `src/navigation/RootNavigator.tsx` | MODIFY — TasksStack, tab badge, deep link, tabBarTestIDs |
+| `src/mocks/handlers.ts` | MODIFY — POST /api/tasks/sync handler |
+
+### Review Findings Fixed
+| # | Severity | Issue | Decision |
+|---|----------|-------|----------|
+| C1 | CRITICAL | Module-level `nextId` counter breaks Fast Refresh — derive from state | D215 |
+| C2 | CRITICAL | `selectFilteredTasks` creates new array every render — use createSelector | D216 |
+| C3 | CRITICAL | `handleSync` dispatches before fetch succeeds — add rollback | D217 |
+| I1 | IMPORTANT | HomeTab/ProfileTab missing tabBarTestID | D218 |
+| I2 | IMPORTANT | Inline useSelector inconsistent — export selectCurrentFilter | D219 |
+
+### Verification
+All 6 CDP checks passed: navigation, screenshot, health, component tree, store state, error log.
+
+### Decisions (D215-D219)
+- D215: State-derived IDs in Redux reducers instead of module-level counters
+- D216: Use createSelector for array-returning selectors
+- D217: Optimistic sync with markAllUnsynced rollback on failure
+- D218: All tabs must have tabBarTestID for consistent testability
+- D219: Named selector exports for all useSelector calls
+
+## Phase 21: Feed Search with Debounce — Ralph S1 (Complete)
+
+**Status:** Complete (2026-03-12)
+
+Added search/filter functionality to the FeedScreen as the first Ralph Loop user story (S1). The feature includes a debounced TextInput search bar (300ms), client-side filtering by title and body (case-insensitive), clear button with instant reset (bypasses debounce), and an empty state via ListEmptyComponent. Store items remain unchanged — filtering is purely client-side via useMemo.
+
+### Files
+| File | Action |
+|------|--------|
+| `src/screens/FeedScreen.tsx` | MODIFY — Add search bar, debounce, filtering, clear button, ListEmptyComponent |
+
+### Review Findings Fixed
+| # | Source | Severity | Issue | Decision |
+|---|--------|----------|-------|----------|
+| 1 | Internal | IMPORTANT | Individual useSelector calls instead of object selector | Existing pattern |
+| 2 | Internal | IMPORTANT | debouncedQuery label missing from evaluator | Fixed inline |
+| 3 | Codex (95) | HIGH | Clear button has 300ms delay — bypass debounce | D224 |
+| 4 | Gemini (95) | MODERATE | Conditional FlatList mount/unmount — use ListEmptyComponent | D225 |
+| 5 | Gemini (100) | HIGH | FlatList missing flex-1 — breaks virtualization | D226 |
+
+### Verification
+All 6 CDP checks passed: navigation (Feed route), screenshot, health (0 errors), component tree (search input + FlatList with flex-1 + ListEmptyComponent), store state (3 items unchanged), error log (0 new errors).
+
+### Decisions (D224-D226)
+- D224: Clear button bypasses debounce by setting debouncedQuery directly
+- D225: Use ListEmptyComponent instead of conditional FlatList mount
+- D226: FlatList requires flex-1 for proper virtualization

@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
-import { View, Text, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import type { RootState, AppDispatch } from '../store';
 import { setLoading, setItems, setError } from '../store/slices/feedSlice';
@@ -9,7 +9,18 @@ const API_BASE = 'https://api.testapp.local';
 
 export default function FeedScreen() {
   const dispatch = useDispatch<AppDispatch>();
-  const { items, loading, error } = useSelector((state: RootState) => state.feed);
+  const items = useSelector((state: RootState) => state.feed.items);
+  const loading = useSelector((state: RootState) => state.feed.loading);
+  const error = useSelector((state: RootState) => state.feed.error);
+  const [searchText, setSearchText] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchText);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   const fetchFeed = useCallback(async (triggerError = false) => {
     dispatch(setLoading(true));
@@ -32,15 +43,51 @@ export default function FeedScreen() {
     void fetchFeed();
   }, [fetchFeed]);
 
-  const renderItem = ({ item, index }: { item: FeedItem; index: number }) => (
+  const filteredItems = useMemo(() => {
+    if (!debouncedQuery) return items;
+    const lower = debouncedQuery.toLowerCase();
+    return items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(lower) ||
+        item.body.toLowerCase().includes(lower),
+    );
+  }, [items, debouncedQuery]);
+
+  const renderItem = useCallback(({ item, index }: { item: FeedItem; index: number }) => (
     <View testID={`feed-item-${index}`} className="mb-3 rounded-lg bg-gray-100 p-4">
       <Text className="font-semibold">{item.title}</Text>
       <Text className="mt-1 text-sm text-gray-600">{item.body}</Text>
     </View>
-  );
+  ), []);
 
   return (
-    <View className="flex-1 bg-white px-4 pt-4">
+    <View testID="feed-screen" className="flex-1 bg-white px-4 pt-4">
+      <View className="mb-3 flex-row items-center rounded-lg border border-gray-300 bg-gray-50">
+        <TextInput
+          testID="feed-search-input"
+          className="flex-1 px-3 py-2 text-base"
+          placeholder="Search posts..."
+          placeholderTextColor="#9ca3af"
+          value={searchText}
+          onChangeText={setSearchText}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {searchText.length > 0 && (
+          <Pressable
+            testID="feed-search-clear"
+            className="px-3 py-2"
+            onPress={() => {
+              setSearchText('');
+              setDebouncedQuery('');
+            }}
+          >
+            <Text className="text-base text-gray-400">✕</Text>
+          </Pressable>
+        )}
+      </View>
+
       {loading && (
         <View testID="feed-loading" className="items-center py-8">
           <ActivityIndicator size="large" />
@@ -62,9 +109,19 @@ export default function FeedScreen() {
 
       {!loading && !error && (
         <FlatList
-          data={items}
+          testID="feed-list"
+          className="flex-1"
+          data={filteredItems}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <View testID="feed-no-results" className="flex-1 items-center justify-center pt-16">
+              <Text className="text-lg text-gray-400">
+                {debouncedQuery.length > 0 ? 'No results' : 'No posts yet'}
+              </Text>
+            </View>
+          }
         />
       )}
 

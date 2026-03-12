@@ -698,3 +698,41 @@ Codex found `agents.launched` and `agents.useful` were initialized but never inc
 
 ### D214: Evaluator increments phases_completed before writing report
 Codex found report always showed 7/8 because Phase 7 was marked complete after writing. Moved increment before the write step.
+
+## 2026-03-12: Tasks Tab Feature
+
+### D215: State-derived IDs in Redux reducers instead of module-level counters
+Module-level `let nextId = 4` resets to 4 on Fast Refresh while the Redux store preserves existing items, causing ID collisions. Deriving the next ID from `state.items.reduce(max)` inside the reducer is deterministic and survives hot reload.
+
+### D216: Use createSelector for array-returning selectors
+`selectFilteredTasks` calls `.filter()` which returns a new array reference every time. `useSelector` uses strict equality, so this triggers re-renders on every store change. Wrapping with `createSelector` from RTK memoizes the result and only recomputes when inputs change.
+
+### D217: Optimistic sync with markAllUnsynced rollback on failure
+`handleSync` dispatches `markAllSynced` optimistically before the network call. If the fetch fails, `markAllUnsynced` is dispatched to restore the unsynced indicators. This prevents the silent data loss where items appear synced but the server never received the update.
+
+### D218: All tabs must have tabBarTestID for consistent testability
+`HomeTab` and `ProfileTab` were missing `tabBarTestID` while `NotificationsTab` and `TasksTab` had them. Added `tab-home` and `tab-profile` for consistent agent navigation via CDP/Maestro.
+
+### D219: Named selector exports for all useSelector calls
+Inline `useSelector((state: RootState) => state.tasks.filter)` is inconsistent with the named-selector pattern used for all other selectors in the same component. Exported `selectCurrentFilter` from the slice for consistency and easier refactoring.
+
+### D220: Dispatch sync only on server success, not optimistically
+Gemini (100) and Codex (96) both flagged that optimistic `markAllSynced` + `markAllUnsynced` rollback corrupts sync state — it marks ALL tasks dirty, not just the ones that were unsynced before. Simplest correct fix: dispatch `markAllSynced` only after a successful server response.
+
+### D221: Memoize renderItem with useCallback in FlatList screens
+Gemini (95) flagged that `renderItem` defined inline creates a new function reference on every render. Combined with a controlled TextInput, every keystroke re-renders all FlatList rows. Wrapping in `useCallback` with `[dispatch]` dependency prevents this.
+
+### D222: Memoize all selectors that compute derived values with createSelector
+Gemini (90) flagged `selectActiveTaskCount` using `.filter()` without memoization. Even though it returns a primitive, the filter runs on every Redux state change. Wrapping with `createSelector` avoids recomputation when `tasks.items` hasn't changed.
+
+### D223: Add keyboardShouldPersistTaps to FlatList with TextInput siblings
+Codex (84) flagged that without `keyboardShouldPersistTaps="handled"`, the first tap on a FlatList row after typing is swallowed (it dismisses the keyboard instead). Standard fix for screens mixing TextInput with tappable lists.
+
+### D224: Clear button bypasses debounce by setting debouncedQuery directly
+Codex (95) flagged that `setSearchText('')` alone triggers the 300ms debounce timer, leaving the filtered list showing stale results for 300ms after the clear button is pressed. Fix: set both `setSearchText('')` and `setDebouncedQuery('')` in the clear handler for immediate reset.
+
+### D225: Use ListEmptyComponent instead of conditional FlatList mount
+Gemini (95) flagged that conditionally rendering FlatList vs empty-state View destroys scroll position and FlatList internal state on each toggle. Using `ListEmptyComponent` prop keeps the FlatList always mounted, preserving virtualization state.
+
+### D226: FlatList requires flex-1 for proper virtualization
+Gemini (100) flagged that without `className="flex-1"`, FlatList cannot measure its container height, breaking virtualization (windowSize, maxToRenderPerBatch) and potentially pushing sibling elements off screen.
