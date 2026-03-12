@@ -16,10 +16,15 @@ export type NotificationsStackParams = {
   NotificationDetail: { id: string };
 };
 
+export type TasksStackParams = {
+  TasksMain: undefined;
+};
+
 export type TabParams = {
   HomeTab: NavigatorScreenParams<HomeStackParams>;
   ProfileTab: NavigatorScreenParams<ProfileStackParams>;
   NotificationsTab: NavigatorScreenParams<NotificationsStackParams>;
+  TasksTab: NavigatorScreenParams<TasksStackParams>;
 };
 
 export type RootStackParams = {

@@ -8,8 +8,10 @@ import type {
   HomeStackParams,
   ProfileStackParams,
   NotificationsStackParams,
+  TasksStackParams,
 } from './types';
 import { selectUnreadCount } from '../store/slices/notificationsSlice';
+import { selectActiveTaskCount } from '../store/slices/tasksSlice';
 import HomeScreen from '../screens/HomeScreen';
 import FeedScreen from '../screens/FeedScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -17,6 +19,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import ReloadTestScreen from '../screens/ReloadTestScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import NotificationDetailScreen from '../screens/NotificationDetailScreen';
+import TasksScreen from '../screens/TasksScreen';
 import ErrorLabModal from '../screens/ErrorLabModal';
 import DeepLinkScreen from '../screens/DeepLinkScreen';
 
@@ -25,6 +28,7 @@ const Tab = createBottomTabNavigator<TabParams>();
 const HomeStack = createNativeStackNavigator<HomeStackParams>();
 const ProfileStack = createNativeStackNavigator<ProfileStackParams>();
 const NotificationsStack = createNativeStackNavigator<NotificationsStackParams>();
+const TasksStack = createNativeStackNavigator<TasksStackParams>();
 
 function HomeStackNavigator() {
   return (
@@ -62,12 +66,21 @@ function NotificationsStackNavigator() {
   );
 }
 
+function TasksStackNavigator() {
+  return (
+    <TasksStack.Navigator>
+      <TasksStack.Screen name="TasksMain" component={TasksScreen} options={{ title: 'Tasks' }} />
+    </TasksStack.Navigator>
+  );
+}
+
 function TabNavigator() {
   const unreadCount = useSelector(selectUnreadCount);
+  const activeTaskCount = useSelector(selectActiveTaskCount);
 
   return (
     <Tab.Navigator>
-      <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ headerShown: false, title: 'Home' }} />
+      <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ headerShown: false, title: 'Home', tabBarTestID: 'tab-home' }} />
       <Tab.Screen
         name="NotificationsTab"
         component={NotificationsStackNavigator}
@@ -78,7 +91,17 @@ function TabNavigator() {
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
       />
-      <Tab.Screen name="ProfileTab" component={ProfileStackNavigator} options={{ headerShown: false, title: 'Profile' }} />
+      <Tab.Screen
+        name="TasksTab"
+        component={TasksStackNavigator}
+        options={{
+          headerShown: false,
+          title: 'Tasks',
+          tabBarTestID: 'tab-tasks',
+          tabBarBadge: activeTaskCount > 0 ? activeTaskCount : undefined,
+        }}
+      />
+      <Tab.Screen name="ProfileTab" component={ProfileStackNavigator} options={{ headerShown: false, title: 'Profile', tabBarTestID: 'tab-profile' }} />
     </Tab.Navigator>
   );
 }
@@ -99,6 +122,11 @@ const linking = {
             screens: {
               NotificationsMain: 'notifications',
               NotificationDetail: 'notification/:id',
+            },
+          },
+          TasksTab: {
+            screens: {
+              TasksMain: 'tasks',
             },
           },
           ProfileTab: {

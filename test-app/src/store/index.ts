@@ -5,12 +5,14 @@ import userSlice from './slices/userSlice';
 import feedSlice from './slices/feedSlice';
 import notificationsSlice from './slices/notificationsSlice';
 import settingsSlice from './slices/settingsSlice';
+import tasksSlice from './slices/tasksSlice';
 
 const rootReducer = combineReducers({
   user: userSlice.reducer,
   feed: feedSlice.reducer,
   notifications: notificationsSlice.reducer,
   settings: settingsSlice.reducer,
+  tasks: tasksSlice.reducer,
 });
 
 const persistConfig = {

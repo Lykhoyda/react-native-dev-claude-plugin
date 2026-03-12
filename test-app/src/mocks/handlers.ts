@@ -29,4 +29,8 @@ export const handlers = [
   http.post(`${BASE_URL}/api/notifications/read`, () => {
     return new HttpResponse(null, { status: 204 });
   }),
+
+  http.post(`${BASE_URL}/api/tasks/sync`, () => {
+    return HttpResponse.json({ synced: true });
+  }),
 ];

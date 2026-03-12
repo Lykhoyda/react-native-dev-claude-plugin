@@ -1,0 +1,163 @@
+import React, { useCallback, useState } from 'react';
+import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import { useSelector, useDispatch } from 'react-redux';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { TasksStackParams } from '../navigation/types';
+import {
+  addTask,
+  toggleTask,
+  removeTask,
+  setFilter,
+  markAllSynced,
+  selectFilteredTasks,
+  selectUnsyncedCount,
+  selectActiveTaskCount,
+  selectCurrentFilter,
+} from '../store/slices/tasksSlice';
+import type { TaskFilter, TaskItem } from '../store/slices/tasksSlice';
+
+const API_BASE = 'https://api.testapp.local';
+
+const FILTERS: { key: TaskFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'done', label: 'Done' },
+];
+
+type Props = NativeStackScreenProps<TasksStackParams, 'TasksMain'>;
+
+export default function TasksScreen(_props: Props) {
+  const dispatch = useDispatch();
+  const [text, setText] = useState('');
+  const filteredTasks = useSelector(selectFilteredTasks);
+  const currentFilter = useSelector(selectCurrentFilter);
+  const unsyncedCount = useSelector(selectUnsyncedCount);
+  const activeCount = useSelector(selectActiveTaskCount);
+
+  const handleAdd = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    dispatch(addTask(trimmed));
+    setText('');
+  };
+
+  const handleSync = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/tasks/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: unsyncedCount }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      dispatch(markAllSynced());
+    } catch {
+      // sync failed — tasks remain unsynced, user can retry
+    }
+  };
+
+  const renderItem = useCallback(({ item, index }: { item: TaskItem; index: number }) => (
+    <View
+      testID={`task-item-${index}`}
+      className={`mb-2 flex-row items-center rounded-lg p-4 ${item.done ? 'bg-gray-50' : 'bg-white border border-gray-200'}`}
+    >
+      <Pressable
+        testID={`task-toggle-${index}`}
+        className={`h-6 w-6 rounded-full border-2 items-center justify-center ${item.done ? 'border-green-500 bg-green-500' : 'border-gray-300'}`}
+        onPress={() => dispatch(toggleTask(item.id))}
+      >
+        {item.done && <Text className="text-xs text-white">✓</Text>}
+      </Pressable>
+
+      <Text
+        testID={`task-title-${index}`}
+        className={`ml-3 flex-1 ${item.done ? 'text-gray-400 line-through' : 'text-gray-800'}`}
+      >
+        {item.title}
+      </Text>
+
+      {!item.synced && (
+        <View testID={`task-unsynced-${index}`} className="mr-2 h-2 w-2 rounded-full bg-orange-400" />
+      )}
+
+      <Pressable
+        testID={`task-remove-${index}`}
+        className="ml-2 h-6 w-6 items-center justify-center rounded-full bg-red-100"
+        onPress={() => dispatch(removeTask(item.id))}
+      >
+        <Text className="text-xs text-red-500">✕</Text>
+      </Pressable>
+    </View>
+  ), [dispatch]);
+
+  return (
+    <View testID="task-screen" className="flex-1 bg-white px-4 pt-4">
+      <Text testID="task-header" className="text-xl font-bold">
+        Tasks ({activeCount} active)
+      </Text>
+
+      <View className="mt-3 flex-row gap-2">
+        <TextInput
+          testID="task-input"
+          className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+          placeholder="Add a task..."
+          value={text}
+          onChangeText={setText}
+          onSubmitEditing={handleAdd}
+          returnKeyType="done"
+        />
+        <Pressable
+          testID="task-add-btn"
+          className="rounded-lg bg-blue-500 px-4 py-2 justify-center"
+          onPress={handleAdd}
+        >
+          <Text className="font-semibold text-white">Add</Text>
+        </Pressable>
+      </View>
+
+      <View testID="task-filters" className="mt-3 flex-row gap-2">
+        {FILTERS.map((f) => (
+          <Pressable
+            key={f.key}
+            testID={`task-filter-${f.key}`}
+            className={`rounded-full px-4 py-1.5 ${currentFilter === f.key ? 'bg-blue-500' : 'bg-gray-100'}`}
+            onPress={() => dispatch(setFilter(f.key))}
+          >
+            <Text className={currentFilter === f.key ? 'font-semibold text-white' : 'text-gray-600'}>
+              {f.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {filteredTasks.length === 0 ? (
+        <View testID="task-empty" className="flex-1 items-center justify-center">
+          <Text className="text-lg text-gray-400">
+            {currentFilter === 'all' ? 'No tasks yet' : `No ${currentFilter} tasks`}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          testID="task-list"
+          className="mt-4"
+          data={filteredTasks}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          keyboardShouldPersistTaps="handled"
+        />
+      )}
+
+      <View className="pb-4 pt-2">
+        <Pressable
+          testID="task-sync-btn"
+          className={`rounded-lg px-4 py-3 ${unsyncedCount > 0 ? 'bg-indigo-500' : 'bg-gray-300'}`}
+          onPress={handleSync}
+          disabled={unsyncedCount === 0}
+        >
+          <Text className="text-center font-semibold text-white">
+            {unsyncedCount > 0 ? `Sync ${unsyncedCount} change${unsyncedCount > 1 ? 's' : ''}` : 'All synced'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
