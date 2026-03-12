@@ -1,0 +1,103 @@
+appId: host.exp.Exponent
+---
+# ============================================================
+# S2: Dark Mode Theme Toggle — E2E Proof
+# Verifies: toggle label changes, theme persists across screens
+# Self-healing: works regardless of initial theme state
+# ============================================================
+
+# --- Setup: handle Expo Go launcher if visible ---
+- runFlow:
+    when:
+      visible: "rn-dev-agent-test"
+    commands:
+      - tapOn: "rn-dev-agent-test"
+      - waitForAnimationToEnd
+
+# --- Dismiss developer welcome dialog if visible ---
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+
+# --- Dismiss dev tools menu if visible ---
+- runFlow:
+    when:
+      visible: "Go Home"
+    commands:
+      - tapOn:
+          point: "50%,10%"
+      - waitForAnimationToEnd
+
+# --- Ensure we're on Home screen ---
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 15000
+
+# --- Navigate to Profile tab ---
+- tapOn:
+    id: "tab-profile"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "profile-name"
+
+# --- Navigate to Settings ---
+- tapOn:
+    id: "profile-settings-btn"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Theme"
+    timeout: 5000
+
+# --- Ensure we start in Light mode (reset if Dark) ---
+- runFlow:
+    when:
+      visible: "Dark"
+    commands:
+      - tapOn:
+          id: "settings-theme-toggle"
+      - waitForAnimationToEnd
+
+# --- Verify theme is Light ---
+- assertVisible:
+    id: "settings-theme-label"
+- assertVisible: "Light"
+
+# --- Toggle to Dark Mode ---
+- tapOn:
+    id: "settings-theme-toggle"
+- waitForAnimationToEnd
+
+# --- Verify theme changed to Dark ---
+- assertVisible: "Dark"
+
+# --- Go back to Profile to verify theme applies ---
+- tapOn: "Profile"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "profile-name"
+
+# --- Navigate to Home tab to verify theme across tabs ---
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- assertVisible: "Welcome"
+
+# --- Return to Settings and verify Dark persists ---
+- tapOn:
+    id: "tab-profile"
+- waitForAnimationToEnd
+- tapOn:
+    id: "profile-settings-btn"
+- waitForAnimationToEnd
+- assertVisible: "Dark"
+
+# --- Toggle back to Light ---
+- tapOn:
+    id: "settings-theme-toggle"
+- waitForAnimationToEnd
+
+# --- Verify Light is restored ---
+- assertVisible: "Light"

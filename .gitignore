@@ -4,11 +4,16 @@ node_modules/
 .agents
 .idea
 skills-lock.json
+docs
+reports
+.DS_Store
 
 # Test app
 test-app/node_modules/
 test-app/.expo/
 test-app/ios/
 test-app/android/
+test-app/drivers/
+test-app/reports/
 test-app/harness/node_modules/
 test-app/harness/dist/

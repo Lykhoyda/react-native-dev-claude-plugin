@@ -1,0 +1,30 @@
+appId: host.exp.Exponent
+---
+# Reusable setup: launches app from Expo Go and dismisses developer dialogs
+- runFlow:
+    when:
+      visible: "rn-dev-agent-test"
+    commands:
+      - tapOn: "rn-dev-agent-test"
+      - waitForAnimationToEnd
+
+- extendedWaitUntil:
+    visible: "Continue"
+    timeout: 20000
+
+- tapOn: "Continue"
+- waitForAnimationToEnd
+
+# Dismiss dev tools menu if it appeared
+- runFlow:
+    when:
+      visible: "Go Home"
+    commands:
+      - tapOn:
+          point: "50%,10%"
+      - waitForAnimationToEnd
+
+# Wait for app to be ready
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 10000

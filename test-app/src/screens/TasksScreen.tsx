@@ -15,6 +15,7 @@ import {
   selectCurrentFilter,
 } from '../store/slices/tasksSlice';
 import type { TaskFilter, TaskItem } from '../store/slices/tasksSlice';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 const API_BASE = 'https://api.testapp.local';
 
@@ -33,6 +34,7 @@ export default function TasksScreen(_props: Props) {
   const currentFilter = useSelector(selectCurrentFilter);
   const unsyncedCount = useSelector(selectUnsyncedCount);
   const activeCount = useSelector(selectActiveTaskCount);
+  const colors = useThemeColors();
 
   const handleAdd = () => {
     const trimmed = text.trim();
@@ -50,19 +52,19 @@ export default function TasksScreen(_props: Props) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       dispatch(markAllSynced());
-    } catch {
-      // sync failed — tasks remain unsynced, user can retry
+    } catch (err) {
+      console.error('[Tasks] sync failed:', err);
     }
   };
 
   const renderItem = useCallback(({ item, index }: { item: TaskItem; index: number }) => (
     <View
       testID={`task-item-${index}`}
-      className={`mb-2 flex-row items-center rounded-lg p-4 ${item.done ? 'bg-gray-50' : 'bg-white border border-gray-200'}`}
+      className={`mb-2 flex-row items-center rounded-lg p-4 ${item.done ? colors.card : `${colors.bg} border ${colors.border}`}`}
     >
       <Pressable
         testID={`task-toggle-${index}`}
-        className={`h-6 w-6 rounded-full border-2 items-center justify-center ${item.done ? 'border-green-500 bg-green-500' : 'border-gray-300'}`}
+        className={`h-6 w-6 rounded-full border-2 items-center justify-center ${item.done ? 'border-green-500 bg-green-500' : colors.border}`}
         onPress={() => dispatch(toggleTask(item.id))}
       >
         {item.done && <Text className="text-xs text-white">✓</Text>}
@@ -70,7 +72,7 @@ export default function TasksScreen(_props: Props) {
 
       <Text
         testID={`task-title-${index}`}
-        className={`ml-3 flex-1 ${item.done ? 'text-gray-400 line-through' : 'text-gray-800'}`}
+        className={`ml-3 flex-1 ${item.done ? `${colors.muted} line-through` : colors.text}`}
       >
         {item.title}
       </Text>
@@ -87,19 +89,20 @@ export default function TasksScreen(_props: Props) {
         <Text className="text-xs text-red-500">✕</Text>
       </Pressable>
     </View>
-  ), [dispatch]);
+  ), [dispatch, colors]);
 
   return (
-    <View testID="task-screen" className="flex-1 bg-white px-4 pt-4">
-      <Text testID="task-header" className="text-xl font-bold">
+    <View testID="task-screen" className={`flex-1 ${colors.bg} px-4 pt-4`}>
+      <Text testID="task-header" className={`text-xl font-bold ${colors.text}`}>
         Tasks ({activeCount} active)
       </Text>
 
       <View className="mt-3 flex-row gap-2">
         <TextInput
           testID="task-input"
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+          className={`flex-1 rounded-lg border ${colors.border} px-3 py-2 ${colors.text}`}
           placeholder="Add a task..."
+          placeholderTextColor={colors.placeholderColor}
           value={text}
           onChangeText={setText}
           onSubmitEditing={handleAdd}
@@ -119,10 +122,10 @@ export default function TasksScreen(_props: Props) {
           <Pressable
             key={f.key}
             testID={`task-filter-${f.key}`}
-            className={`rounded-full px-4 py-1.5 ${currentFilter === f.key ? 'bg-blue-500' : 'bg-gray-100'}`}
+            className={`rounded-full px-4 py-1.5 ${currentFilter === f.key ? 'bg-blue-500' : colors.card}`}
             onPress={() => dispatch(setFilter(f.key))}
           >
-            <Text className={currentFilter === f.key ? 'font-semibold text-white' : 'text-gray-600'}>
+            <Text className={currentFilter === f.key ? 'font-semibold text-white' : colors.text}>
               {f.label}
             </Text>
           </Pressable>
@@ -131,7 +134,7 @@ export default function TasksScreen(_props: Props) {
 
       {filteredTasks.length === 0 ? (
         <View testID="task-empty" className="flex-1 items-center justify-center">
-          <Text className="text-lg text-gray-400">
+          <Text className={`text-lg ${colors.muted}`}>
             {currentFilter === 'all' ? 'No tasks yet' : `No ${currentFilter} tasks`}
           </Text>
         </View>

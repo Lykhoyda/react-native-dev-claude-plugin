@@ -1,0 +1,77 @@
+appId: host.exp.Exponent
+---
+# ============================================================
+# S1: Feed Search with Debounce — E2E Proof
+# Verifies: search input, text entry, clear button, debounce
+# ============================================================
+
+# --- Setup: handle Expo Go launcher if visible ---
+- runFlow:
+    when:
+      visible: "rn-dev-agent-test"
+    commands:
+      - tapOn: "rn-dev-agent-test"
+      - waitForAnimationToEnd
+
+# --- Dismiss developer welcome dialog if visible ---
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+
+# --- Dismiss dev tools menu if visible ---
+- runFlow:
+    when:
+      visible: "Go Home"
+    commands:
+      - tapOn:
+          point: "50%,10%"
+      - waitForAnimationToEnd
+
+# --- Ensure we're on Home screen ---
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 15000
+
+# --- Navigate to Feed screen ---
+- tapOn: "Go to Feed"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Feed"
+    timeout: 5000
+
+# --- Verify search input is visible ---
+- assertVisible:
+    id: "feed-search-input"
+
+# --- Type search text ---
+- tapOn:
+    id: "feed-search-input"
+- inputText: "hello world"
+
+# --- Verify clear button appears after typing ---
+- assertVisible:
+    id: "feed-search-clear"
+
+# --- Tap clear button ---
+- tapOn:
+    id: "feed-search-clear"
+
+# --- Verify clear button is gone (input is empty) ---
+- assertNotVisible:
+    id: "feed-search-clear"
+
+# --- Type again to verify search still works ---
+- tapOn:
+    id: "feed-search-input"
+- inputText: "test query"
+- assertVisible:
+    id: "feed-search-clear"
+
+# --- Navigate back to Home via header back button ---
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 5000

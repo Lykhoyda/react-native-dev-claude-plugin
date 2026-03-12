@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import type { RootState, AppDispatch } from '../store';
 import { setLoading, setItems, setError } from '../store/slices/feedSlice';
 import type { FeedItem } from '../store/slices/feedSlice';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 const API_BASE = 'https://api.testapp.local';
 
@@ -14,6 +15,7 @@ export default function FeedScreen() {
   const error = useSelector((state: RootState) => state.feed.error);
   const [searchText, setSearchText] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const colors = useThemeColors();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -54,20 +56,20 @@ export default function FeedScreen() {
   }, [items, debouncedQuery]);
 
   const renderItem = useCallback(({ item, index }: { item: FeedItem; index: number }) => (
-    <View testID={`feed-item-${index}`} className="mb-3 rounded-lg bg-gray-100 p-4">
-      <Text className="font-semibold">{item.title}</Text>
-      <Text className="mt-1 text-sm text-gray-600">{item.body}</Text>
+    <View testID={`feed-item-${index}`} className={`mb-3 rounded-lg p-4 ${colors.card}`}>
+      <Text className={`font-semibold ${colors.text}`}>{item.title}</Text>
+      <Text className={`mt-1 text-sm ${colors.muted}`}>{item.body}</Text>
     </View>
-  ), []);
+  ), [colors]);
 
   return (
-    <View testID="feed-screen" className="flex-1 bg-white px-4 pt-4">
-      <View className="mb-3 flex-row items-center rounded-lg border border-gray-300 bg-gray-50">
+    <View testID="feed-screen" className={`flex-1 ${colors.bg} px-4 pt-4`}>
+      <View className={`mb-3 flex-row items-center rounded-lg border ${colors.border} ${colors.card}`}>
         <TextInput
           testID="feed-search-input"
-          className="flex-1 px-3 py-2 text-base"
+          className={`flex-1 px-3 py-2 text-base ${colors.text}`}
           placeholder="Search posts..."
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={colors.placeholderColor}
           value={searchText}
           onChangeText={setSearchText}
           returnKeyType="search"
@@ -83,7 +85,7 @@ export default function FeedScreen() {
               setDebouncedQuery('');
             }}
           >
-            <Text className="text-base text-gray-400">✕</Text>
+            <Text className={`text-base ${colors.muted}`}>✕</Text>
           </Pressable>
         )}
       </View>
@@ -117,7 +119,7 @@ export default function FeedScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View testID="feed-no-results" className="flex-1 items-center justify-center pt-16">
-              <Text className="text-lg text-gray-400">
+              <Text className={`text-lg ${colors.muted}`}>
                 {debouncedQuery.length > 0 ? 'No results' : 'No posts yet'}
               </Text>
             </View>
