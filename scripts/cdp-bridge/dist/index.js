@@ -12,6 +12,7 @@ import { createNetworkLogHandler } from './tools/network-log.js';
 import { createConsoleLogHandler } from './tools/console-log.js';
 import { createStoreStateHandler } from './tools/store-state.js';
 import { createDevSettingsHandler } from './tools/dev-settings.js';
+import { createInteractHandler } from './tools/interact.js';
 let client = new CDPClient();
 const getClient = () => client;
 const setClient = (c) => { client = c; };
@@ -30,7 +31,7 @@ server.tool('cdp_reload', 'Trigger a full reload of the app. Auto-reconnects to 
 }, createReloadHandler(getClient));
 server.tool('cdp_component_tree', 'Get React component tree. Returns components with props, state, testIDs. Use filter to scope to a specific subtree — NEVER request full tree unless necessary (saves tokens). Detects RedBox and warns.', {
     filter: z.string().optional().describe('Component name or testID to scope query (e.g. "CartBadge", "product-list")'),
-    depth: z.number().int().min(1).max(6).default(3).describe('Max depth (default 3, max 6)'),
+    depth: z.number().int().min(1).max(12).default(4).describe('Max depth (default 4, max 12)'),
 }, createComponentTreeHandler(getClient));
 server.tool('cdp_navigation_state', 'Get current navigation state: active route, params, stack history, nested navigators, active tab. Works with React Navigation and Expo Router.', {}, createNavigationStateHandler(getClient));
 server.tool('cdp_error_log', 'Get unhandled JS errors and promise rejections. Hooked into ErrorUtils and Hermes rejection tracker. If empty but app crashed, the error is NATIVE — use bash logcat/simctl log instead.', {
@@ -49,10 +50,19 @@ server.tool('cdp_console_log', 'Get recent console output. Buffered in ring buff
 server.tool('cdp_store_state', 'Read app store state (Redux, Zustand). Use path to query specific slice (e.g. "cart.items", "auth.user.name"). Redux auto-detected via fiber Provider. Zustand requires: if (__DEV__) global.__ZUSTAND_STORES__ = { store }', {
     path: z.string().optional().describe('Dot-path into store state (e.g. "cart.items")'),
 }, createStoreStateHandler(getClient));
-server.tool('cdp_dev_settings', 'Control React Native dev settings programmatically (no visual dev menu needed). For reload with auto-reconnect, use cdp_reload instead.', {
+server.tool('cdp_dev_settings', 'Control React Native dev settings programmatically (no visual dev menu needed). dismissRedBox clears LogBox overlays and RedBox errors via a 4-tier fallback chain. For reload with auto-reconnect, use cdp_reload instead.', {
     action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox'])
         .describe('Dev menu action to execute'),
 }, createDevSettingsHandler(getClient));
+server.tool('cdp_interact', 'Interact with a React Native UI component via the fiber tree. Finds the component by testID or accessibilityLabel and dispatches the action. Use cdp_component_tree first to confirm the component is mounted. Does not simulate native touch — calls the JS event handler directly.', {
+    action: z.enum(['press', 'typeText', 'scroll']).describe('press: calls onPress. typeText: calls onChangeText. scroll: calls scrollTo or onScroll.'),
+    testID: z.string().optional().describe('testID prop of the target component'),
+    accessibilityLabel: z.string().optional().describe('accessibilityLabel prop (used if testID not provided)'),
+    text: z.string().optional().describe('Required for typeText: the text to enter'),
+    scrollX: z.number().optional().describe('For scroll: horizontal offset in pixels (default 0)'),
+    scrollY: z.number().optional().describe('For scroll: vertical offset in pixels (default 300)'),
+    animated: z.boolean().default(true).describe('For scroll: whether to animate'),
+}, createInteractHandler(getClient));
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);

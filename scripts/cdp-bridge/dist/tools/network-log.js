@@ -1,9 +1,9 @@
-import { textResult, withConnection } from '../utils.js';
+import { okResult, withConnection } from '../utils.js';
 export function createNetworkLogHandler(getClient) {
     return withConnection(getClient, async (args, client) => {
         if (args.clear) {
             client.networkBuffer.clear();
-            return textResult(JSON.stringify({ cleared: true }));
+            return okResult({ cleared: true });
         }
         const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
         let entries = args.filter !== undefined
@@ -12,10 +12,6 @@ export function createNetworkLogHandler(getClient) {
         if (args.filter !== undefined && entries.length > limit) {
             entries = entries.slice(-limit);
         }
-        return textResult(JSON.stringify({
-            mode: client.networkMode,
-            count: entries.length,
-            requests: entries,
-        }));
+        return okResult({ mode: client.networkMode, count: entries.length, requests: entries });
     });
 }

@@ -1,4 +1,3 @@
-import '../global.css';
 import React from 'react';
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
@@ -6,11 +5,6 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { store, persistor } from './store';
 import RootNavigator, { linking } from './navigation/RootNavigator';
 import type { RootStackParams } from './navigation/types';
-import { server } from './mocks/server';
-
-if (__DEV__) {
-  server.listen({ onUnhandledRequest: 'bypass' });
-}
 
 const navigationRef = createNavigationContainerRef<RootStackParams>();
 

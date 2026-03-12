@@ -77,3 +77,11 @@ export interface EvaluateResult {
   value?: unknown;
   error?: string;
 }
+
+export interface ResultEnvelope<T = unknown> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+  truncated?: boolean;
+  meta?: Record<string, unknown>;
+}

@@ -5,12 +5,16 @@
     "version": "1.0.0",
     "scheme": "rndatest",
     "orientation": "portrait",
-    "platforms": ["ios"],
+    "platforms": [
+      "ios"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.rndevagent.testapp"
     },
     "newArchEnabled": true,
-    "entryPoint": "./src/App.tsx"
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }

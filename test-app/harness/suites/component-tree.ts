@@ -4,7 +4,7 @@ import { assertTruthy, assertGreaterThan } from '../lib/assertions.js';
 export async function componentTreeSuite(client: McpTestClient): Promise<string> {
   const result = await client.callTool('cdp_component_tree', {
     filter: 'home-welcome',
-    depth: 3,
+    depth: 10,
   });
   assertTruthy(!result.isError, 'component_tree returned error');
 
@@ -17,7 +17,7 @@ export async function componentTreeSuite(client: McpTestClient): Promise<string>
 
   const listResult = await client.callTool('cdp_component_tree', {
     filter: 'home-feature',
-    depth: 2,
+    depth: 10,
   });
   assertTruthy(!listResult.isError, 'feature query returned error');
 

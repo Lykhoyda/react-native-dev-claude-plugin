@@ -12,6 +12,7 @@ import { createNetworkLogHandler } from './tools/network-log.js';
 import { createConsoleLogHandler } from './tools/console-log.js';
 import { createStoreStateHandler } from './tools/store-state.js';
 import { createDevSettingsHandler } from './tools/dev-settings.js';
+import { createInteractHandler } from './tools/interact.js';
 
 let client = new CDPClient();
 
@@ -55,7 +56,7 @@ server.tool(
   'Get React component tree. Returns components with props, state, testIDs. Use filter to scope to a specific subtree — NEVER request full tree unless necessary (saves tokens). Detects RedBox and warns.',
   {
     filter: z.string().optional().describe('Component name or testID to scope query (e.g. "CartBadge", "product-list")'),
-    depth: z.number().int().min(1).max(6).default(3).describe('Max depth (default 3, max 6)'),
+    depth: z.number().int().min(1).max(12).default(4).describe('Max depth (default 4, max 12)'),
   },
   createComponentTreeHandler(getClient),
 );
@@ -109,12 +110,27 @@ server.tool(
 
 server.tool(
   'cdp_dev_settings',
-  'Control React Native dev settings programmatically (no visual dev menu needed). For reload with auto-reconnect, use cdp_reload instead.',
+  'Control React Native dev settings programmatically (no visual dev menu needed). dismissRedBox clears LogBox overlays and RedBox errors via a 4-tier fallback chain. For reload with auto-reconnect, use cdp_reload instead.',
   {
     action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox'])
       .describe('Dev menu action to execute'),
   },
   createDevSettingsHandler(getClient),
+);
+
+server.tool(
+  'cdp_interact',
+  'Interact with a React Native UI component via the fiber tree. Finds the component by testID or accessibilityLabel and dispatches the action. Use cdp_component_tree first to confirm the component is mounted. Does not simulate native touch — calls the JS event handler directly.',
+  {
+    action: z.enum(['press', 'typeText', 'scroll']).describe('press: calls onPress. typeText: calls onChangeText. scroll: calls scrollTo or onScroll.'),
+    testID: z.string().optional().describe('testID prop of the target component'),
+    accessibilityLabel: z.string().optional().describe('accessibilityLabel prop (used if testID not provided)'),
+    text: z.string().optional().describe('Required for typeText: the text to enter'),
+    scrollX: z.number().optional().describe('For scroll: horizontal offset in pixels (default 0)'),
+    scrollY: z.number().optional().describe('For scroll: vertical offset in pixels (default 300)'),
+    animated: z.boolean().default(true).describe('For scroll: whether to animate'),
+  },
+  createInteractHandler(getClient),
 );
 
 async function main() {

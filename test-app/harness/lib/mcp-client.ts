@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const CDP_BRIDGE_PATH = resolve(__dirname, '..', '..', '..', '..', 'scripts', 'cdp-bridge', 'dist', 'index.js');
+const CDP_BRIDGE_PATH = resolve(__dirname, '..', '..', '..', 'scripts', 'cdp-bridge', 'dist', 'index.js');
 
 export interface ToolCallResult {
   content: Array<{ type: string; text?: string }>;
@@ -43,7 +43,11 @@ export class McpTestClient {
       .map((c) => c.text)
       .join('');
     try {
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object' && 'ok' in parsed && parsed.ok === true && 'data' in parsed) {
+        return parsed.data;
+      }
+      return parsed;
     } catch {
       return text;
     }

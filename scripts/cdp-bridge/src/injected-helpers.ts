@@ -1,10 +1,13 @@
 export const INJECTED_HELPERS = `
 (function() {
-  if (globalThis.__RN_AGENT) return;
+  var __HELPERS_VERSION__ = 5;
+  if (globalThis.__RN_AGENT && globalThis.__RN_AGENT.__v === __HELPERS_VERSION__) return;
+  if (globalThis.__RN_AGENT) delete globalThis.__RN_AGENT;
 
   function safeStringify(obj, maxLen) {
     try {
       var seen = new WeakSet();
+      var limit = maxLen || 50000;
       var str = JSON.stringify(obj, function(key, val) {
         try {
           if (typeof val === 'function') return '[Function]';
@@ -17,8 +20,12 @@ export const INJECTED_HELPERS = `
           return val;
         } catch(e) { return '[Unserializable]'; }
       });
-      if (str && str.length > (maxLen || 50000)) {
-        return str.substring(0, maxLen || 50000) + '...[TRUNCATED]';
+      if (str && str.length > limit) {
+        return JSON.stringify({
+          __agent_truncated: true,
+          preview: str.substring(0, limit),
+          originalLength: str.length
+        });
       }
       return str;
     } catch(e) {
@@ -27,7 +34,11 @@ export const INJECTED_HELPERS = `
   }
 
   // Fiber Tree Walker
-  function getTree(maxDepth, filter) {
+  function getTree(opts) {
+    opts = opts || {};
+    var maxDepth = opts.maxDepth || 4;
+    var filter = opts.filter || opts.testID || opts.type || null;
+
     var hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (!hook || !hook.renderers || hook.renderers.size === 0) {
       return JSON.stringify({ error: 'React DevTools hook not available' });
@@ -67,12 +78,11 @@ export const INJECTED_HELPERS = `
       return fiber.type.displayName || fiber.type.name || null;
     }
 
-    function walk(fiber, depth) {
-      if (!fiber || depth > (maxDepth || 3) || visited.has(fiber)) return null;
-      visited.add(fiber);
+    function walkSubtree(fiber, depth, limit, vis) {
+      if (!fiber || depth > limit || vis.has(fiber)) return null;
+      vis.add(fiber);
       totalNodes++;
 
-      // Text node capture (tag 6)
       if (fiber.tag === 6 && typeof fiber.memoizedProps === 'string') {
         return { text: fiber.memoizedProps };
       }
@@ -85,7 +95,7 @@ export const INJECTED_HELPERS = `
       var children = [];
       var child = fiber.child;
       while (child) {
-        var node = walk(child, isUserComponent ? depth + 1 : depth);
+        var node = walkSubtree(child, isUserComponent ? depth + 1 : depth, limit, vis);
         if (node) children.push(node);
         child = child.sibling;
       }
@@ -146,18 +156,54 @@ export const INJECTED_HELPERS = `
           : children;
       }
 
-      // Filter support
-      if (filter) {
-        var f = filter.toLowerCase();
-        var matchesName = name && name.toLowerCase().indexOf(f) >= 0;
-        var matchesTestID = testID && testID.toLowerCase().indexOf(f) >= 0;
-        if (!matchesName && !matchesTestID && children.length === 0) return null;
-      }
-
       return result;
     }
 
-    var tree = walk(root.current, 0);
+    // For filtered queries: BFS to find matches, then build compact subtrees
+    if (filter) {
+      var f = String(filter).toLowerCase();
+      var matchFibers = [];
+      var queue = [root.current];
+      var seen = new WeakSet();
+      var scanned = 0;
+      while (queue.length > 0 && scanned < 2000) {
+        var fiber = queue.shift();
+        if (!fiber || seen.has(fiber)) continue;
+        seen.add(fiber);
+        scanned++;
+        var fname = getName(fiber);
+        var ftid = fiber.memoizedProps && (fiber.memoizedProps.testID || fiber.memoizedProps.nativeID);
+        var matchesName = fname && fname.toLowerCase().indexOf(f) >= 0;
+        var matchesTestID = ftid && ftid.toLowerCase().indexOf(f) >= 0;
+        if (matchesName || matchesTestID) matchFibers.push(fiber);
+        var ch = fiber.child;
+        while (ch) {
+          queue.push(ch);
+          ch = ch.sibling;
+        }
+      }
+
+      if (matchFibers.length === 0) {
+        return JSON.stringify({ tree: null, totalNodes: scanned });
+      }
+
+      var matches = [];
+      for (var mi = 0; mi < matchFibers.length && mi < 10; mi++) {
+        var subtreeVis = new WeakSet();
+        var subtree = walkSubtree(matchFibers[mi], 0, maxDepth, subtreeVis);
+        if (subtree) matches.push(subtree);
+      }
+      totalNodes = scanned;
+      var tree = matches.length === 1 ? matches[0] : { matches: matches };
+      var output = JSON.stringify({ tree: tree, totalNodes: totalNodes });
+      if (output.length > 50000) {
+        return JSON.stringify({ tree: matches[0] || null, totalNodes: totalNodes, truncated: true });
+      }
+      return output;
+    }
+
+    // Unfiltered: standard walk with depth limit
+    var tree = walkSubtree(root.current, 0, maxDepth, visited);
     var output = JSON.stringify({ tree: tree, totalNodes: totalNodes }, null, 2);
     if (output.length > 50000) {
       return JSON.stringify({ error: 'Tree too large (' + output.length + ' chars). Use a filter parameter to scope the query.' });
@@ -201,6 +247,11 @@ export const INJECTED_HELPERS = `
     }
 
     var navState = findNav(root && root.current);
+
+    if (!navState && globalThis.__NAV_REF__ && globalThis.__NAV_REF__.getRootState) {
+      navState = globalThis.__NAV_REF__.getRootState();
+    }
+
     if (!navState) return JSON.stringify({ error: 'Navigation state not found. Is React Navigation or Expo Router installed?' });
 
     function simplify(s) {
@@ -290,11 +341,74 @@ export const INJECTED_HELPERS = `
     return safeStringify({ type: storeType, state: state }, 30000);
   }
 
-  // Error Tracking
-  var errors = [];
+  // Console Capture — monkey-patch console to capture app-level logs
+  // CDP Runtime.consoleAPICalled doesn't fire for RN Bridgeless app-level console calls
+  if (!globalThis.__RN_AGENT_CONSOLE__) globalThis.__RN_AGENT_CONSOLE__ = [];
+  var consoleBuf = globalThis.__RN_AGENT_CONSOLE__;
+  var CONSOLE_BUF_MAX = 200;
+
+  if (!globalThis.__RN_AGENT_CONSOLE_PATCHED__) {
+    globalThis.__RN_AGENT_CONSOLE_PATCHED__ = true;
+    var origConsole = {
+      log: console.log, warn: console.warn, error: console.error,
+      info: console.info, debug: console.debug
+    };
+    globalThis.__RN_AGENT_ORIG_CONSOLE__ = origConsole;
+
+    function wrapConsole(level) {
+      return function() {
+        var text = '';
+        for (var i = 0; i < arguments.length; i++) {
+          if (i > 0) text += ' ';
+          try { text += typeof arguments[i] === 'string' ? arguments[i] : JSON.stringify(arguments[i]); }
+          catch(e) { text += String(arguments[i]); }
+        }
+        if (text.indexOf('__RN_NET__:') === 0) {
+          origConsole[level].apply(console, arguments);
+          return;
+        }
+        consoleBuf.push({ level: level, text: text, timestamp: new Date().toISOString() });
+        if (consoleBuf.length > CONSOLE_BUF_MAX) consoleBuf.shift();
+        origConsole[level].apply(console, arguments);
+      };
+    }
+
+    console.log = wrapConsole('log');
+    console.warn = wrapConsole('warn');
+    console.error = wrapConsole('error');
+    console.info = wrapConsole('info');
+    console.debug = wrapConsole('debug');
+  } else {
+    consoleBuf = globalThis.__RN_AGENT_CONSOLE__;
+  }
+
+  function getConsole(opts) {
+    opts = opts || {};
+    var level = opts.level || 'all';
+    var lim = opts.limit || 50;
+    var entries = [];
+    for (var i = 0; i < consoleBuf.length; i++) {
+      if (level === 'all' || consoleBuf[i].level === level) {
+        entries.push(consoleBuf[i]);
+      }
+    }
+    return JSON.stringify(entries.slice(-lim));
+  }
+
+  function clearConsole() {
+    consoleBuf.length = 0;
+    return 'cleared';
+  }
+
+  // Error Tracking — use global array so reinjection doesn't lose buffered errors
+  if (!globalThis.__RN_AGENT_ERRORS__) globalThis.__RN_AGENT_ERRORS__ = [];
+  var errors = globalThis.__RN_AGENT_ERRORS__;
 
   try {
-    var origHandler = ErrorUtils.getGlobalHandler();
+    if (globalThis.__RN_AGENT_ORIG_ERR_HANDLER__ === undefined) {
+      globalThis.__RN_AGENT_ORIG_ERR_HANDLER__ = ErrorUtils.getGlobalHandler();
+    }
+    var origHandler = globalThis.__RN_AGENT_ORIG_ERR_HANDLER__;
     ErrorUtils.setGlobalHandler(function(error, isFatal) {
       errors.push({
         message: (error && error.message) || String(error),
@@ -307,8 +421,9 @@ export const INJECTED_HELPERS = `
     });
   } catch(e) {}
 
-  try {
+  if (!globalThis.__RN_AGENT_REJECTION_TRACKED__) try {
     if (globalThis.HermesInternal && globalThis.HermesInternal.enablePromiseRejectionTracker) {
+      globalThis.__RN_AGENT_REJECTION_TRACKED__ = true;
       globalThis.HermesInternal.enablePromiseRejectionTracker({
         allRejections: true,
         onUnhandled: function(id, error) {
@@ -326,27 +441,154 @@ export const INJECTED_HELPERS = `
   function getErrors() { return JSON.stringify(errors); }
   function clearErrors() { errors.length = 0; return 'cleared'; }
 
+  // UI Interaction
+  function interact(opts) {
+    opts = opts || {};
+    var action = opts.action;
+    var selector = opts.testID || opts.accessibilityLabel;
+    var matchField = opts.testID ? 'testID' : 'accessibilityLabel';
+
+    if (!action) return JSON.stringify({ error: 'action is required' });
+    if (!selector) return JSON.stringify({ error: 'testID or accessibilityLabel is required' });
+
+    var hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+    if (!hook || !hook.renderers || hook.renderers.size === 0) {
+      return JSON.stringify({ error: 'React DevTools hook not available' });
+    }
+
+    var rendererId = hook.renderers.keys().next().value;
+    var roots = hook.getFiberRoots(rendererId);
+    if (!roots || roots.size === 0) {
+      return JSON.stringify({ error: 'No fiber roots — app may still be loading' });
+    }
+
+    var root = roots.values().next().value;
+    var found = null;
+    var findCount = 0;
+
+    function findFiber(fiber) {
+      var current = fiber;
+      while (current) {
+        findCount++;
+        if (findCount > 5000) return;
+        var props = current.memoizedProps;
+        if (props && props[matchField] === selector) {
+          found = current;
+          return;
+        }
+        if (current.child) findFiber(current.child);
+        if (found) return;
+        current = current.sibling;
+      }
+    }
+
+    findFiber(root.current);
+
+    if (!found) {
+      return JSON.stringify({
+        error: 'Component not found',
+        selector: selector,
+        hint: 'Use cdp_component_tree to verify the component is mounted and the testID is correct.'
+      });
+    }
+
+    var props = found.memoizedProps || {};
+    var typeName = (found.type && (found.type.displayName || found.type.name)) || 'Unknown';
+
+    try {
+      if (action === 'press') {
+        if (typeof props.onPress !== 'function') {
+          return JSON.stringify({ error: 'Component has no onPress handler', component: typeName, testID: selector });
+        }
+        props.onPress({ nativeEvent: {} });
+        return JSON.stringify({ success: true, action: 'press', component: typeName, testID: selector });
+      }
+
+      if (action === 'typeText') {
+        var text = opts.text !== undefined ? opts.text : '';
+        if (typeof props.onChangeText === 'function') {
+          props.onChangeText(text);
+        }
+        if (typeof props.onChange === 'function') {
+          props.onChange({ nativeEvent: { text: text } });
+        }
+        if (typeof props.onChangeText !== 'function' && typeof props.onChange !== 'function') {
+          return JSON.stringify({ error: 'Component has no onChangeText or onChange handler', component: typeName, testID: selector });
+        }
+        return JSON.stringify({ success: true, action: 'typeText', component: typeName, testID: selector, text: text });
+      }
+
+      if (action === 'scroll') {
+        var x = opts.scrollX !== undefined ? opts.scrollX : 0;
+        var y = opts.scrollY !== undefined ? opts.scrollY : 300;
+        var animated = opts.animated !== false;
+        var stateNode = found.stateNode;
+
+        if (stateNode && typeof stateNode.scrollTo === 'function') {
+          stateNode.scrollTo({ x: x, y: y, animated: animated });
+          return JSON.stringify({ success: true, action: 'scroll', method: 'scrollTo', component: typeName, testID: selector, x: x, y: y });
+        }
+
+        if (typeof props.onScroll === 'function') {
+          props.onScroll({
+            nativeEvent: {
+              contentOffset: { x: x, y: y },
+              contentSize: { width: 0, height: 0 },
+              layoutMeasurement: { width: 0, height: 0 }
+            }
+          });
+          return JSON.stringify({ success: true, action: 'scroll', method: 'onScroll', component: typeName, testID: selector, x: x, y: y, note: 'Synthetic event — does not physically scroll the native view' });
+        }
+
+        return JSON.stringify({ error: 'Component has no scrollTo method or onScroll handler', component: typeName, testID: selector });
+      }
+
+      return JSON.stringify({ error: 'Unknown action: ' + action });
+    } catch(e) {
+      return JSON.stringify({
+        success: true, action_executed: true,
+        handler_error: (e && e.message || String(e)),
+        component: typeName, testID: selector,
+        hint: 'The action was dispatched but the handler threw. This may be intentional (e.g., error testing).'
+      });
+    }
+  }
+
   // Public API
   globalThis.__RN_AGENT = {
+    __v: __HELPERS_VERSION__,
     getTree: getTree,
     getNavState: getNavState,
     getStoreState: getStoreState,
     getErrors: getErrors,
     clearErrors: clearErrors,
+    getConsole: getConsole,
+    clearConsole: clearConsole,
+    interact: interact,
     isReady: function() {
       var hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
       return !!(hook && hook.renderers && hook.renderers.size > 0 && hook.getFiberRoots);
     },
     getAppInfo: function() {
       try {
-        return JSON.stringify({
+        var info = {
           __DEV__: typeof __DEV__ !== 'undefined' ? __DEV__ : null,
-          platform: require('react-native').Platform.OS,
-          version: require('react-native').Platform.Version,
-          rnVersion: require('react-native/Libraries/Core/ReactNativeVersion').version,
           hermes: typeof HermesInternal !== 'undefined',
-          dimensions: require('react-native').Dimensions.get('window')
-        });
+          platform: null,
+          version: null,
+          rnVersion: null,
+          dimensions: null
+        };
+        try {
+          var RN = require('react-native');
+          info.platform = RN.Platform.OS;
+          info.version = RN.Platform.Version;
+          info.dimensions = RN.Dimensions.get('window');
+        } catch(e) {}
+        try {
+          info.rnVersion = require('react-native/Libraries/Core/ReactNativeVersion').version;
+        } catch(e) {}
+        return JSON.stringify(info);
       } catch(e) {
         return JSON.stringify({ error: e.message });
       }
@@ -411,6 +653,17 @@ export const NETWORK_HOOK_SCRIPT = `
       var self = this;
       var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       var start = Date.now();
+      var reported = false;
+
+      function reportResponse(status) {
+        if (reported) return;
+        reported = true;
+        if (globalThis.__RN_AGENT_NETWORK_CB__) {
+          globalThis.__RN_AGENT_NETWORK_CB__('response', {
+            id: id, status: status, duration_ms: Date.now() - start
+          });
+        }
+      }
 
       if (globalThis.__RN_AGENT_NETWORK_CB__) {
         globalThis.__RN_AGENT_NETWORK_CB__('request', {
@@ -418,13 +671,10 @@ export const NETWORK_HOOK_SCRIPT = `
         });
       }
 
-      self.addEventListener('loadend', function() {
-        if (globalThis.__RN_AGENT_NETWORK_CB__) {
-          globalThis.__RN_AGENT_NETWORK_CB__('response', {
-            id: id, status: self.status, duration_ms: Date.now() - start
-          });
-        }
-      });
+      self.addEventListener('load', function() { reportResponse(self.status); });
+      self.addEventListener('error', function() { reportResponse(0); });
+      self.addEventListener('abort', function() { reportResponse(0); });
+      self.addEventListener('timeout', function() { reportResponse(0); });
 
       return origSend.apply(this, arguments);
     };

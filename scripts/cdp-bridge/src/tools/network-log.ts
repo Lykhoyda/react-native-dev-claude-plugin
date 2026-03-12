@@ -1,11 +1,11 @@
 import type { CDPClient } from '../cdp-client.js';
-import { textResult, withConnection } from '../utils.js';
+import { okResult, withConnection } from '../utils.js';
 
 export function createNetworkLogHandler(getClient: () => CDPClient) {
   return withConnection(getClient, async (args: { limit: number; filter?: string; clear: boolean }, client) => {
     if (args.clear) {
       client.networkBuffer.clear();
-      return textResult(JSON.stringify({ cleared: true }));
+      return okResult({ cleared: true });
     }
 
     const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
@@ -18,10 +18,6 @@ export function createNetworkLogHandler(getClient: () => CDPClient) {
       entries = entries.slice(-limit);
     }
 
-    return textResult(JSON.stringify({
-      mode: client.networkMode,
-      count: entries.length,
-      requests: entries,
-    }));
+    return okResult({ mode: client.networkMode, count: entries.length, requests: entries });
   });
 }

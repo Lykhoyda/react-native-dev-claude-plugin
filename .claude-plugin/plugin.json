@@ -34,7 +34,6 @@
     "./commands/check-env.md",
     "./commands/build-and-test.md"
   ],
-  "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "rn-dev-agent-cdp": {
       "command": "node",

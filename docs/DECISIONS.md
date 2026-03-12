@@ -458,3 +458,149 @@ The `Promise.race` timeout pattern in `runSuite` clears the `setTimeout` timer o
 
 ### D141: try/finally for MCP client lifecycle
 The harness runner wraps suite execution in `try/finally` to ensure `client.close()` is called even if `connect()` or a suite throws an unexpected error, preventing orphaned child processes.
+
+## 2026-03-11: Live Plugin Testing & Compatibility Fixes
+
+### D142: Broaden CDP target filter for RN 0.76+ Bridgeless mode
+RN 0.76+ with Bridgeless architecture registers debug targets as `"React Native Bridgeless [C++ connection]"` without a `vm: "Hermes"` field. Updated target filter from `t.vm === 'Hermes'` to `(t.vm === 'Hermes' || t.title?.includes('React Native'))` to match both legacy and Bridgeless targets.
+
+### D143: Navigation state fallback to __NAV_REF__.getRootState()
+The fiber-walk approach to find NavigationContainer fails on Bridgeless mode because the component's displayName is not preserved in production-like builds. Added `globalThis.__NAV_REF__.getRootState()` as a fallback, which the test app already sets via `createNavigationContainerRef()`.
+
+### D144: getTree() accepts opts object instead of positional args
+Changed `getTree(maxDepth, filter)` to `getTree(opts)` where opts has `maxDepth`, `filter`, `testID`, and `type` fields. This is more extensible and avoids confusion when only some parameters are provided.
+
+### D145: Root index.js entry for expo run:ios native binary
+Native binaries built with `expo run:ios` request `index.bundle` from Metro, which resolves `./index` at the project root. Expo's `AppEntry.js` (used by `expo start`) is different. Created `test-app/index.js` that imports from `src/App` and calls `registerRootComponent()`.
+
+### D146: Remove MSW from test app entry
+MSW v2's `@mswjs/interceptors` uses `static class blocks` which Expo's Babel config doesn't transform. Since MSW is not essential for CDP tool testing, removed the server import from App.tsx. The feed screen shows a network error instead of mock data, which is acceptable for testing network logging.
+
+### D147: Remove NativeWind from Metro/Babel config
+NativeWind v4 requires `react-native-worklets/plugin` which is incompatible with RN 0.76. Removed NativeWind from both `babel.config.js` and `metro.config.js`. Components with `className` props render without styles but remain functional for CDP testing.
+
+### D148: DevSettings via TurboModule proxy in Bridgeless mode
+`require("react-native").DevSettings` returns `undefined` in RN 0.76 Bridgeless CDP scope because `require()` is unavailable. Fixed by using `__turboModuleProxy("DevSettings")` which exposes `reload`, `toggleElementInspector`, and other methods directly. Both `cdp_dev_settings` and `cdp_reload` tools now use TurboModule with require fallback.
+
+### D149: Async evaluate via global slot + polling
+Hermes CDP doesn't support `awaitPromise: true` — it returns raw promise internals (`_h`, `_i`, `_j`, `_k`) instead of resolved values. Implemented workaround: store promise result in a uniquely-named global slot, poll every 100ms until resolved (up to 5s timeout), then clean up the global.
+
+### D150: Reload maintains WebSocket in Bridgeless mode
+In RN 0.76 Bridgeless, `DevSettings.reload()` may not close the CDP WebSocket (unlike legacy architecture). The `cdp_reload` tool now handles both cases: if WS disconnects, auto-reconnect; if WS stays open, verify the app is still responsive post-reload.
+
+## 2026-03-12: Post-Review Bug Fixes (Gemini + Codex gpt-5.4)
+
+### D151: Split autoConnect into public guard + internal discoverAndConnect
+Codex review (CRITICAL): `reconnect()` called `autoConnect()` which threw when `reconnecting=true`, making every auto-reconnect self-fail. Extracted `discoverAndConnect()` as the internal discovery+connection method. `autoConnect()` now guards against duplicate calls then delegates to `discoverAndConnect()`. `reconnect()` calls `discoverAndConnect()` directly.
+
+### D152: Only set _helpersInjected after verified injection
+Codex review (HIGH): `setup()` set `_helpersInjected = true` unconditionally even when `evaluate(INJECTED_HELPERS)` failed. Now: injection result is checked, then a verification probe (`typeof globalThis.__RN_AGENT === "object"`) must pass before the flag is set.
+
+### D153: safeStringify returns valid JSON on truncation
+Gemini review: `safeStringify()` truncated mid-JSON with `...[TRUNCATED]` suffix, producing invalid JSON that downstream `JSON.parse()` would reject. Now wraps truncated output in a valid envelope: `{ __agent_truncated: true, preview: "...", originalLength: N }`.
+
+### D154: evaluateAsync — deferred cleanup + serialization inside Hermes
+Gemini review (memory leak): if a Promise resolved after the 5s timeout, the global slot was never cleaned because the Node-side cleanup ran before resolution. Now the wrapper installs a `setTimeout(delete, 10s)` inside Hermes as a deferred fallback.
+Codex review (false timeout): non-serializable resolved values caused `returnByValue` to omit `result.value`, making the poll loop never observe completion. Now the wrapper serializes values to JSON inside Hermes (`safeVal()`), so the slot always contains a string the poll can read.
+
+### D155: sendWithTimeout wraps ws.send() in try/catch
+Codex review: if `ws.send()` threw synchronously (e.g., during a close race), the pending entry and timeout timer leaked. Now caught, cleaned up, and rejected immediately.
+
+### D156: Filter __RN_NET__ messages before console buffer push
+Codex review: in hook mode, internal `__RN_NET__:` console messages consumed ring buffer slots, evicting real app logs. Now the `Runtime.consoleAPICalled` handler checks for the prefix before pushing. The `parseNetworkHookMessage` handler in `handleMessage` still processes them independently.
+
+### D157: XHR hook listens for all terminal events
+Gemini review: XHR hook only had `loadend` listener, missing `error`, `abort`, `timeout`. Added all four listeners with a `reported` guard to prevent duplicate reporting.
+
+### D158: Reload re-injects helpers when Bridgeless WS stays open
+Post-test finding: Bridgeless reload resets the JS context but keeps the WebSocket open. The reconnect flow (which re-runs `setup()`) never triggered. Now the reload tool polls for `__RN_AGENT` existence; if absent, calls `reinjectHelpers()` to re-inject into the new context.
+
+### D159: togglePerfMonitor graceful degradation
+Post-test finding: `togglePerformanceMonitor` method not available on all Bridgeless TurboModule implementations. Now tries `togglePerformanceMonitor`, then `togglePerfMonitor`, then returns `not_available` instead of throwing.
+
+### D160: Fix store-state truncation contract drift
+Codex follow-up: `store-state.ts` handler still checked for old `...[TRUNCATED]` suffix after `safeStringify` was updated to return `{ __agent_truncated, preview, originalLength }` envelope (D153). Updated handler to detect `__agent_truncated` key instead.
+
+### D161: Close stale socket on connectToTarget retry
+Codex review: if `connectWs()` succeeded but `setup()` failed, the retry loop opened a new socket without closing the old one, leaking event listeners and duplicate buffering. Now the catch block closes and nulls the stale socket before retrying.
+
+### D162: Narrow reload catch to expected disconnect errors
+Codex review: `cdp_reload` caught all evaluation errors (not just expected WS disconnects), then proceeded to report success. Now only WS-close, WS-not-connected, and timeout errors are swallowed; unexpected failures return an error result.
+
+## 2026-03-12: Phase 13 — Four Prioritized Improvements
+
+### D163: Structured result envelope for all tools
+Replaced `textResult`/`errorResult` with typed `okResult`/`failResult`/`warnResult` builders that wrap all responses in `{ ok, data, error, truncated, meta }`. Non-breaking: existing payload shapes are preserved inside `data`. Enables consistent error handling and metadata propagation across all 11 tools.
+
+### D164: Reliable LogBox/RedBox dismissal via 4-tier fallback
+`dismissRedBox` now tries: (1) `LogBoxData.clear()`, (2) `globalThis.__logBoxData.clear()`, (3) `LogBox.ignoreAllLogs` toggle, (4) returns `"no_method_available"` instead of silent "ok". The handler surfaces a `warnResult` when all tiers fail, preventing false confirmation.
+
+### D165: cdp_interact tool for UI events via fiber tree
+New tool dispatches `press`, `typeText`, and `scroll` actions by walking the React fiber tree to find components by `testID` or `accessibilityLabel`, then calling `memoizedProps` handlers directly (`onPress`, `onChangeText`, `scrollTo`/`onScroll`). Does not simulate native touch — calls JS handlers directly.
+
+### D166: Source map symbolication for error stacks
+New `symbolicate.ts` module batches all stack frames from error entries into a single POST to Metro's `/symbolicate` endpoint. 3-second timeout with AbortController, graceful fallback to raw stacks on failure. Integrated into `cdp_error_log` tool.
+
+### D167: Two-phase BFS search for filtered component tree queries
+Replaced the single-pass walk-then-prune approach with a two-phase strategy: (1) BFS to find all matching fibers (up to 2000 nodes), (2) build compact subtrees from each match using the user's depth limit. Solves the depth problem where React Navigation + Fabric apps have 40-75+ user component layers from root to actual UI components.
+
+### D168: Versioned helper injection
+Added `__HELPERS_VERSION__` to prevent stale cached helpers. On connect, if the version doesn't match, old helpers are deleted and fresh ones injected. Solves the issue where a rebuilt MCP server skipped injection because `globalThis.__RN_AGENT` already existed from a previous session.
+
+### D169: Max depth increased to 12 for unfiltered queries
+Previous max of 6 was too restrictive for Fabric/Bridgeless RN apps where View, Provider, NavigationContainer, etc. all count as user components. Increased to 12, with default 4.
+
+### D170: Fix BFS double-enqueue of child siblings
+Code review fix: the filtered BFS loop was enqueuing `fiber.child`, then separately iterating `fiber.child.sibling` chain, then also enqueuing `fiber.sibling`. The sibling loop was redundant — the standard `child + sibling` pattern covers the full tree. Removed the inner loop.
+
+### D171: Fresh WeakSet per subtree walk in filtered queries
+Code review fix: all matched subtrees shared a single `visited` WeakSet, causing the 2nd+ matches to be silently pruned if they shared any nodes with earlier matches. Now each subtree walk gets its own WeakSet.
+
+### D172: Guard JSON.parse in interact handler
+Code review fix: `JSON.parse(result.value)` in `interact.ts` was unguarded. If Hermes returned malformed JSON, the raw SyntaxError would propagate through `withConnection` catch with no context. Now wrapped in try/catch with descriptive error message.
+
+### D173: Fix warnResult meta spread order
+Code review fix: `{ warning, ...meta }` allowed caller-supplied `meta.warning` to silently overwrite the `warning` parameter. Reversed to `{ ...meta, warning }` so the explicit warning argument always wins.
+
+### D174: Fix symbolicate clearTimeout leak
+Code review fix: `clearTimeout(timer)` was only called after successful fetch. Moved into `finally` block to ensure cleanup on all paths (non-OK response, JSON parse failure, network error).
+
+## 2026-03-12: External Review Fixes (Gemini + Codex Round 2)
+
+### D175: True BFS in filtered component tree search
+Gemini review: the filtered BFS used `queue.push(fiber.child); queue.push(fiber.sibling)` which treats the fiber tree as a binary tree, processing siblings after children in queue order. Fixed to iterate the full sibling chain (`var ch = fiber.child; while (ch) { queue.push(ch); ch = ch.sibling; }`) for proper breadth-first ordering.
+
+### D176: interact findFiber uses node count limit instead of depth limit
+Gemini review: `findFiber` had a `depth > 50` guard which fails on deep Fabric apps where the target component sits at depth 75+. Replaced with a `findCount > 5000` node count limit that scales with tree size regardless of depth.
+
+### D177: Guard JSON.parse in error-log handler
+Gemini review: `JSON.parse(result.value)` in `error-log.ts` was unguarded. If Hermes returned malformed JSON, the raw SyntaxError propagated with no diagnostic context. Wrapped in try/catch with descriptive failResult.
+
+### D178: Native RedBox dismiss via DevSettings.dismissRedbox()
+Codex review: `dismissRedBox` only cleared JS-side LogBox state, leaving the native RedBox overlay visible. Added two new tiers at the top: (1) `__turboModuleProxy("DevSettings").dismissRedbox()` for Bridgeless, (2) `require("react-native").DevSettings.dismissRedbox()` for legacy. Now dismisses both JS LogBox and native RedBox.
+
+### D179: togglePerfMonitor returns consistent sentinel
+Codex review: `togglePerfMonitor` returned `"not_available"` while the handler only checked `"no_method_available"`, causing false success for perf monitor when unavailable. Unified to `"no_method_available"` and generalized the warning message.
+
+### D180: Symbolication regex supports Hermes `name@url:line:col` format
+Codex review: the stack frame parser only matched V8-style `at name (url:line:col)` format. Hermes also emits `name@url:line:col` (Firefox-style). Added `HERMES_ATSIGN_RE` as a fallback pattern.
+
+### D181: Error handler accumulation guard on helper reinjection
+Codex review: when helpers were reinjected (version upgrade), `ErrorUtils.setGlobalHandler()` saved the current handler as `origHandler` — but the current handler was already our agent's wrapper, not the app's original. The rejection tracker also re-registered, doubling callbacks. Fixed: (1) save app's original handler in `globalThis.__RN_AGENT_ORIG_ERR_HANDLER__` on first injection only, (2) guard rejection tracker with `__RN_AGENT_REJECTION_TRACKED__` flag, (3) use `globalThis.__RN_AGENT_ERRORS__` shared array so old callbacks still write to the right buffer.
+
+### D182: Clear reconnecting flag immediately on reconnect success
+Pre-existing B41: `reconnecting` flag was only cleared in `.finally()` after the `reconnect()` promise settled. During the reconnect loop, the flag stayed `true`, causing close events on newly established connections to be silently dropped by `handleClose()`. Now `reconnect()` clears the flag at every exit point (success, failure, disposed), and the `.finally()` is removed. The `.catch()` handler in `handleClose()` serves as the last-resort safety net.
+
+### D183: Allow Code-1006 to retry instead of immediate throw
+Pre-existing B42: `connectToTarget()` threw immediately on code 1006 ("abnormal closure"), which is the most common transient failure (another debugger grabbed the target). The other debugger often disconnects within seconds, making retry worthwhile. Now only "refused" (nothing listening at all) triggers an immediate throw. Code 1006 retries through the full 5-attempt loop with 2s delays. The final error message includes a helpful hint if the last failure was code 1006.
+
+## 2026-03-12: Benchmark Experiment Fixes
+
+### D184: Console capture via monkey-patch instead of CDP events
+Benchmark experiment (CRITICAL): `cdp_console_log` returned 0 entries for app-level `console.log` calls in RN Bridgeless mode. Root cause: React Native's console polyfill routes logs through the native bridge, not through Hermes' built-in console, so CDP `Runtime.consoleAPICalled` events never fire. Fixed by monkey-patching `console.log/warn/error/info/debug` in injected helpers to push to `globalThis.__RN_AGENT_CONSOLE__` ring buffer (200 entries). The `cdp_console_log` tool now reads from this injected buffer via `__RN_AGENT.getConsole()`. Console patches are guarded by `__RN_AGENT_CONSOLE_PATCHED__` to prevent double-wrapping on reinjection.
+
+### D185: Auto-connect in withConnection wrapper
+Benchmark experiment (HIGH): All tools except `cdp_status` failed with "Not connected. Call cdp_status first." if called without prior `cdp_status`. AI agents shouldn't need this ceremony. `withConnection` now calls `autoConnect()` when not connected, waits up to 15s for in-progress reconnections, waits up to 5s for helper injection, and retries once on mid-operation disconnect.
+
+### D186: Interact distinguishes handler-threw from action-failed
+Benchmark experiment (MEDIUM): `cdp_interact` returned `failResult` when `onPress` handler threw, even though the press executed successfully. The injected `interact()` catch block now returns `{ success: true, action_executed: true, handler_error: ... }`, and the handler surfaces this as `warnResult` instead of `failResult`.

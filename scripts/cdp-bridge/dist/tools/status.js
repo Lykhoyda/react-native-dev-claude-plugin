@@ -1,4 +1,4 @@
-import { textResult, errorResult } from '../utils.js';
+import { okResult, failResult } from '../utils.js';
 const STATUS_PROBE_EXPRESSION = `
 (function() {
   var result = { appInfo: null, errorCount: 0, fiberTree: false, hasRedBox: false };
@@ -7,7 +7,7 @@ const STATUS_PROBE_EXPRESSION = `
   try { result.appInfo = JSON.parse(agent.getAppInfo()); } catch(e) {}
   try { result.errorCount = JSON.parse(agent.getErrors()).length; } catch(e) {}
   try { result.fiberTree = agent.isReady(); } catch(e) {}
-  try { result.hasRedBox = JSON.parse(agent.getTree(1)).warning === 'APP_HAS_REDBOX'; } catch(e) {}
+  try { result.hasRedBox = JSON.parse(agent.getTree({maxDepth:1})).warning === 'APP_HAS_REDBOX'; } catch(e) {}
   return JSON.stringify(result);
 })()
 `;
@@ -68,11 +68,11 @@ export function createStatusHandler(getClient, setClient, createClient) {
                     networkFallback: client.networkMode === 'hook',
                 },
             };
-            return textResult(JSON.stringify(status, null, 2));
+            return okResult(status);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            return errorResult(message);
+            return failResult(message);
         }
     };
 }

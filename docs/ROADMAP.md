@@ -366,6 +366,78 @@ Decisions: D130-D141.
 
 ---
 
+## Phase 11: Live Plugin Testing & RN 0.76 Compatibility ✅ (2026-03-11)
+
+**Status: Complete**
+
+Installed plugin from directory, launched test app on iOS 26.3 Simulator, and verified all 10 MCP tools against a live React Native 0.76 Bridgeless app.
+
+| Fix | Description | Decision |
+|-----|-------------|----------|
+| CDP target filter | Bridgeless targets lack `vm: "Hermes"` — match on `title` instead | D142 |
+| Navigation fallback | Fiber walk fails in Bridgeless — use `__NAV_REF__` ref | D143 |
+| getTree opts API | Positional args → opts object for extensibility | D144 |
+| Entry point | Created `index.js` for `expo run:ios` native binaries | D145 |
+| MSW removed | `static class blocks` incompatible with Expo Babel | D146 |
+| NativeWind removed | Requires `react-native-worklets` incompatible with RN 0.76 | D147 |
+
+### Tool Verification Results
+
+| Tool | Result | Notes |
+|------|--------|-------|
+| `cdp_status` | PASS | Metro + CDP connected, helpers injected |
+| `cdp_evaluate` | PASS | JS execution works (42*2 = 84) |
+| `cdp_component_tree` | PASS | Tree renders, filter works, RedBox detection works |
+| `cdp_navigation_state` | PASS | Full hierarchy: Tabs → HomeTab → HomeMain |
+| `cdp_store_state` | PASS | Redux state with all 4 slices |
+| `cdp_console_log` | PASS | Ring buffer operational |
+| `cdp_network_log` | PASS | Fallback hook mode active |
+| `cdp_error_log` | PASS | Error tracking operational |
+| `cdp_dev_settings` | PARTIAL | DevSettings unavailable in Bridgeless (B21) |
+| `cdp_reload` | SKIPPED | Would disconnect test session |
+
+---
+
+## Phase 12: Post-Review Bug Fixes (Gemini + Codex gpt-5.4)
+
+**Status: Complete**
+
+Both Gemini and Codex (gpt-5.4) independently reviewed the full CDP bridge implementation. Combined findings: 9 bugs (1 critical, 2 high, 6 medium), 6 stress test scenarios, 2 complex feature proposals, 8 improvement suggestions.
+
+All 9 bugs fixed and verified (13/13 tests passing including post-reload verification).
+
+| Fix | Severity | Description | Decision |
+|-----|----------|-------------|----------|
+| Auto-reconnect self-blocks | CRITICAL | `reconnect()` → `autoConnect()` threw on `reconnecting=true` | D151 |
+| _helpersInjected false positive | HIGH | Set true even when injection failed | D152 |
+| Bridgeless reload loses helpers | HIGH | JS context reset but WS stays open | D158 |
+| safeStringify invalid JSON | HIGH | Truncation mid-JSON broke parsing | D153 |
+| evaluateAsync leak + false timeout | MEDIUM | Memory leak on timeout; non-serializable false timeout | D154 |
+| sendWithTimeout leak | MEDIUM | ws.send() throw leaked pending entries | D155 |
+| Console buffer pollution | MEDIUM | __RN_NET__ messages evicted real logs | D156 |
+| XHR hook incomplete events | MEDIUM | Only loadend, missing error/abort/timeout | D157 |
+| togglePerfMonitor throws | LOW | Not available on all Bridgeless builds | D159 |
+
+### Post-Fix Verification Results
+
+| Tool | Result | Notes |
+|------|--------|-------|
+| `cdp_status` | PASS | Metro + CDP connected, helpers injected |
+| `cdp_evaluate` | PASS | JS execution works (1+1=2) |
+| `cdp_component_tree` | PASS | Tree renders with AppContainer root |
+| `cdp_navigation_state` | PASS | Full hierarchy: Tabs → HomeTab → HomeMain |
+| `cdp_store_state` | PASS | Redux state with all slices |
+| `cdp_console_log` | PASS | Ring buffer operational |
+| `cdp_network_log` | PASS | Fallback hook mode active |
+| `cdp_error_log` | PASS | Error tracking operational |
+| `cdp_dev_settings` | PASS | togglePerfMonitor graceful degradation |
+| `cdp_reload` | PASS | Bridgeless reload with helper re-injection |
+| Post-reload status | PASS | Reconnected and responsive |
+| Post-reload tree | PASS | __RN_AGENT available after reload |
+| Post-reload evaluate | PASS | JS execution works post-reload |
+
+---
+
 ## Source Documents
 
 | Document | Contains |
@@ -374,3 +446,83 @@ Decisions: D130-D141.
 | `rn-dev-agent-cli-research.md` | CLI speed research: screenshot benchmarks, maestro-runner vs Maestro, idb vs simctl analysis, uiautomator dump, snapshot_state.sh script, animation disabling, optimized testing loop timing |
 
 Both are in the project files and serve as the implementation reference.
+
+---
+
+## Phase 13: Four Prioritized Improvements (Complete)
+
+**Status:** Complete (2026-03-12)
+
+### Improvements Implemented
+1. **Structured result envelope** — All 11 tools return `{ ok, data, error, truncated, meta }` via typed builders (`okResult`/`failResult`/`warnResult`)
+2. **Reliable LogBox dismissal** — 4-tier fallback chain with `warnResult` when all tiers fail (replaces silent false "ok")
+3. **`cdp_interact` tool** — Press, typeText, scroll via fiber tree (calls `memoizedProps` handlers directly)
+4. **Source map symbolication** — Batched POST to Metro `/symbolicate` with 3s timeout, integrated in `cdp_error_log`
+
+### Bonus Fixes
+- Two-phase BFS search for filtered component tree (works at any depth in Fabric/Navigation apps)
+- Versioned helper injection (prevents stale `__RN_AGENT` cache)
+- Max depth increased to 12 for unfiltered queries
+
+### Code Review Fixes (D170-D174)
+- BFS double-enqueue of child siblings
+- Shared WeakSet across multi-match subtree walks
+- Unguarded JSON.parse in interact handler
+- warnResult meta spread order
+- symbolicate clearTimeout leak
+
+### Pre-existing HIGH Bug Fixes (D182-D183)
+- B41: `reconnecting` flag cleared immediately on success (not deferred to `.finally()`)
+- B42: Code-1006 retries through full loop instead of immediate throw
+
+### External Review Fixes (D175-D181)
+- True BFS in filtered component tree search (sibling chain iteration)
+- interact findFiber uses node count limit (5000) instead of depth limit (50)
+- Guard JSON.parse in error-log handler
+- Native RedBox dismiss via DevSettings.dismissRedbox() (Bridgeless + legacy)
+- togglePerfMonitor consistent "no_method_available" sentinel
+- Symbolication regex supports Hermes `name@url:line:col` format
+- Error handler accumulation guard on helper reinjection
+
+### Verification
+| Test | Result | Notes |
+|------|--------|-------|
+| cdp_status | PASS | Auto-connect, app info, capabilities |
+| cdp_evaluate | PASS | getAppInfo, globals accessible |
+| cdp_component_tree | PASS | Two-phase BFS filter finds deep testIDs (319 nodes) |
+| cdp_navigation_state | PASS | DeepLink navigation + params |
+| cdp_store_state | PASS | Redux path queries |
+| cdp_network_log | PASS | Hook mode capture |
+| cdp_console_log | PASS | 3 log levels |
+| cdp_error_log | PASS | Error buffer + symbolication |
+| cdp_dev_settings | PASS | togglePerfMonitor |
+| cdp_interact | PASS | Press action via fiber tree |
+| cdp_reload | PASS | Full reload + reconnect + helper re-injection |
+
+## Phase 14: Benchmark Experiment (Complete)
+
+**Status:** Complete (2026-03-12)
+
+28-call benchmark exercising all 11 tools in a realistic debugging workflow against the live test app on iPhone 17 Pro simulator.
+
+### Bugs Found & Fixed (D184-D186)
+1. **B53 (CRITICAL):** `cdp_console_log` captured 0 app-level entries — RN Bridgeless routes console through native bridge, not CDP events. Fixed with console monkey-patch in injected helpers.
+2. **B54 (HIGH):** All tools fail without prior `cdp_status` — no auto-connect. Fixed with lazy auto-connect, reconnect-wait, helper-wait, and one retry on disconnect in `withConnection`.
+3. **B55 (MEDIUM):** `cdp_interact` returned failure when handler threw — press DID execute. Fixed to return `warnResult` with handler error details.
+
+### Performance (clean environment, no orphaned processes)
+| Tool | Calls | Avg(ms) | Min(ms) | Max(ms) |
+|------|-------|---------|---------|---------|
+| cdp_reload | 1 | 577 | 577 | 577 |
+| cdp_status | 2 | 130 | 10 | 249 |
+| cdp_error_log | 1 | 10 | 10 | 10 |
+| cdp_console_log | 2 | 10 | 4 | 15 |
+| cdp_interact | 3 | 7 | 4 | 9 |
+| cdp_evaluate | 6 | 7 | 2 | 19 |
+| cdp_navigation_state | 2 | 5 | 1 | 9 |
+| cdp_component_tree | 4 | 4 | 1 | 9 |
+| cdp_dev_settings | 2 | 4 | 3 | 4 |
+| cdp_store_state | 4 | 2 | 1 | 3 |
+| cdp_network_log | 1 | 1 | 1 | 1 |
+
+**Total:** 28 calls, 971ms, 20.3KB data. 25 ok, 3 warnings, 0 failures.

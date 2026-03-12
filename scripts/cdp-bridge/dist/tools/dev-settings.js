@@ -1,9 +1,24 @@
-import { textResult, errorResult, withConnection } from '../utils.js';
+import { okResult, failResult, warnResult, withConnection } from '../utils.js';
+const RESOLVE_DEV_SETTINGS = `(function() {
+  if (typeof __turboModuleProxy === 'function') {
+    var ds = __turboModuleProxy("DevSettings");
+    if (ds) return ds;
+  }
+  try { return require("react-native").DevSettings; } catch(e) {}
+  return null;
+})()`;
 const ACTION_EXPRESSIONS = {
-    reload: 'require("react-native").DevSettings.reload()',
-    toggleInspector: 'require("react-native").DevSettings.toggleElementInspector()',
-    togglePerfMonitor: 'require("react-native").DevSettings.togglePerformanceMonitor()',
-    dismissRedBox: 'require("react-native/Libraries/LogBox/Data/LogBoxData").clear()',
+    reload: `(function() { var ds = ${RESOLVE_DEV_SETTINGS}; if (!ds || !ds.reload) throw new Error("DevSettings not available"); ds.reload(); return "ok"; })()`,
+    toggleInspector: `(function() { var ds = ${RESOLVE_DEV_SETTINGS}; if (!ds || !ds.toggleElementInspector) throw new Error("DevSettings not available"); ds.toggleElementInspector(); return "ok"; })()`,
+    togglePerfMonitor: `(function() { var ds = ${RESOLVE_DEV_SETTINGS}; if (!ds) throw new Error("DevSettings not available"); if (ds.togglePerformanceMonitor) { ds.togglePerformanceMonitor(); } else if (ds.togglePerfMonitor) { ds.togglePerfMonitor(); } else { return "no_method_available"; } return "ok"; })()`,
+    dismissRedBox: `(function() {
+    try { var ds = (typeof __turboModuleProxy === 'function') ? __turboModuleProxy("DevSettings") : null; if (ds && typeof ds.dismissRedbox === 'function') { ds.dismissRedbox(); return "ok"; } } catch(e0) {}
+    try { var ds2 = require("react-native").DevSettings; if (ds2 && typeof ds2.dismissRedbox === 'function') { ds2.dismissRedbox(); return "ok"; } } catch(e0b) {}
+    try { require("react-native/Libraries/LogBox/Data/LogBoxData").clear(); return "ok"; } catch(e1) {}
+    try { var gd = globalThis.__logBoxData; if (gd && typeof gd.clear === 'function') { gd.clear(); return "ok"; } } catch(e2) {}
+    try { var LB = require("react-native").LogBox; if (LB && typeof LB.ignoreAllLogs === 'function') { LB.ignoreAllLogs(true); LB.ignoreAllLogs(false); return "ok"; } } catch(e3) {}
+    return "no_method_available";
+  })()`,
 };
 export function createDevSettingsHandler(getClient) {
     return withConnection(getClient, async (args, client) => {
@@ -11,24 +26,20 @@ export function createDevSettingsHandler(getClient) {
         try {
             const result = await client.evaluate(expression);
             if (result.error) {
-                return errorResult(`Dev settings error: ${result.error}`);
+                return failResult(`Dev settings error: ${result.error}`);
+            }
+            if (result.value === 'no_method_available') {
+                return warnResult({ action: args.action, executed: false }, `${args.action} not available — all fallback approaches failed.`);
             }
         }
         catch (evalErr) {
             const msg = evalErr instanceof Error ? evalErr.message : String(evalErr);
             const isDisconnect = msg.includes('WebSocket closed') || msg.includes('WebSocket not connected');
             if (args.action === 'reload' && isDisconnect) {
-                return textResult(JSON.stringify({
-                    action: args.action,
-                    executed: true,
-                    note: 'Connection will close — use cdp_status to reconnect.',
-                }));
+                return okResult({ action: args.action, executed: true }, { meta: { note: 'Connection will close — use cdp_status to reconnect.' } });
             }
             throw evalErr;
         }
-        return textResult(JSON.stringify({
-            action: args.action,
-            executed: true,
-        }));
+        return okResult({ action: args.action, executed: true });
     });
 }

@@ -1,24 +1,24 @@
 import type { CDPClient } from '../cdp-client.js';
-import { textResult, errorResult, withConnection } from '../utils.js';
+import { okResult, failResult, withConnection } from '../utils.js';
 
 export function createNavigationStateHandler(getClient: () => CDPClient) {
   return withConnection(getClient, async (_args: Record<string, never>, client) => {
     const result = await client.evaluate('__RN_AGENT.getNavState()');
 
     if (result.error) {
-      return errorResult(`Navigation state error: ${result.error}`);
+      return failResult(`Navigation state error: ${result.error}`);
     }
 
     if (typeof result.value !== 'string') {
-      return errorResult('Unexpected response from getNavState — expected JSON string');
+      return failResult('Unexpected response from getNavState — expected JSON string');
     }
 
     const parsed = JSON.parse(result.value) as Record<string, unknown>;
 
     if (parsed.error) {
-      return errorResult(`Navigation state error: ${parsed.error}`);
+      return failResult(`Navigation state error: ${parsed.error}`);
     }
 
-    return textResult(result.value);
+    return okResult(parsed);
   });
 }

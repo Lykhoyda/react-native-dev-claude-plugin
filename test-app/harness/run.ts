@@ -41,6 +41,7 @@ async function main(): Promise<void> {
   const { errorLogSuite } = await import('./suites/error-log.js');
   const { devSettingsSuite } = await import('./suites/dev-settings.js');
   const { reloadSuite } = await import('./suites/reload.js');
+  const { interactSuite } = await import('./suites/interact.js');
 
   const suites: Array<[string, Suite]> = [
     ['cdp_status', statusSuite],
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     ['cdp_console_log', consoleLogSuite],
     ['cdp_error_log', errorLogSuite],
     ['cdp_dev_settings', devSettingsSuite],
+    ['cdp_interact', interactSuite],
     ['cdp_reload', reloadSuite],
   ];
 

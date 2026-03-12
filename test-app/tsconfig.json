@@ -4,8 +4,13 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "src/*": ["./src/*"]
+      "src/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "nativewind-env.d.ts"
+  ]
 }

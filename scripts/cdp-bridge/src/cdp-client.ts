@@ -54,10 +54,35 @@ export class CDPClient {
   get networkBuffer(): RingBuffer<NetworkEntry> { return this._networkBuffer; }
   get connectionGeneration(): number { return this._connectionGeneration; }
 
+  async reinjectHelpers(): Promise<boolean> {
+    if (!this.isConnected) return false;
+    await this.waitForReact(REACT_READY_TIMEOUT_MS);
+    const helperResult = await this.evaluate(INJECTED_HELPERS);
+    if (helperResult.error) {
+      console.error('CDP: failed to re-inject helpers:', helperResult.error);
+      this._helpersInjected = false;
+      return false;
+    }
+    const verify = await this.evaluate('typeof globalThis.__RN_AGENT === "object"');
+    if (verify.value !== true) {
+      this._helpersInjected = false;
+      return false;
+    }
+    this._helpersInjected = true;
+    return true;
+  }
+
   async autoConnect(portHint?: number): Promise<string> {
     if (this._state === 'connecting' || this.reconnecting) {
       throw new Error('Already connecting to Metro...');
     }
+    if (this.disposed) {
+      throw new Error('Client is disposed. Create a new CDPClient instance.');
+    }
+    return this.discoverAndConnect(portHint);
+  }
+
+  private async discoverAndConnect(portHint?: number): Promise<string> {
     if (this.disposed) {
       throw new Error('Client is disposed. Create a new CDPClient instance.');
     }
@@ -108,7 +133,8 @@ export class CDPClient {
     }
 
     const validTargets = targets
-      .filter(t => t.vm === 'Hermes' && !!t.webSocketDebuggerUrl && !t.title?.includes('Experimental'))
+      .filter(t => !!t.webSocketDebuggerUrl && !t.title?.includes('Experimental') &&
+        (t.vm === 'Hermes' || t.title?.includes('React Native')))
       .map(t => ({
         ...t,
         webSocketDebuggerUrl: t.webSocketDebuggerUrl
@@ -160,10 +186,13 @@ export class CDPClient {
   }
 
   async evaluate(expression: string, awaitPromise = false): Promise<EvaluateResult> {
+    if (awaitPromise) {
+      return this.evaluateAsync(expression);
+    }
+
     const result = await this.sendWithTimeout('Runtime.evaluate', {
       expression,
       returnByValue: true,
-      awaitPromise,
     }, CDP_TIMEOUT_MS) as { result?: { value?: unknown }; exceptionDetails?: { text?: string; exception?: { description?: string } } };
 
     if (result?.exceptionDetails) {
@@ -176,11 +205,75 @@ export class CDPClient {
     return { value: result?.result?.value };
   }
 
+  private async evaluateAsync(expression: string): Promise<EvaluateResult> {
+    // Hermes CDP doesn't support awaitPromise — use global slot + polling
+    // Values are JSON-serialized inside Hermes to handle non-serializable objects
+    // A deferred cleanup timer ensures the slot is removed even if the caller times out
+    const slot = '__rn_agent_async_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const ASYNC_CLEANUP_MS = CDP_TIMEOUT_MS * 2;
+    const wrapper = `(function() {
+      function safeVal(v) {
+        try { return JSON.stringify(v); } catch(e) { return JSON.stringify(String(v)); }
+      }
+      var p = ${expression};
+      if (p && typeof p.then === 'function') {
+        p.then(function(v) { globalThis['${slot}'] = { v: safeVal(v) }; })
+         .catch(function(e) { globalThis['${slot}'] = { e: (e && e.message) || String(e) }; });
+      } else {
+        globalThis['${slot}'] = { v: safeVal(p) };
+      }
+      setTimeout(function() { delete globalThis['${slot}']; }, ${ASYNC_CLEANUP_MS});
+    })()`;
+
+    const initResult = await this.sendWithTimeout('Runtime.evaluate', {
+      expression: wrapper,
+      returnByValue: true,
+    }, CDP_TIMEOUT_MS) as { exceptionDetails?: { text?: string; exception?: { description?: string } } };
+
+    if (initResult?.exceptionDetails) {
+      return {
+        error: initResult.exceptionDetails.text ??
+          initResult.exceptionDetails.exception?.description ??
+          'Unknown evaluation error',
+      };
+    }
+
+    // Poll for result (up to 5s)
+    const start = Date.now();
+    while (Date.now() - start < CDP_TIMEOUT_MS) {
+      const check = await this.sendWithTimeout('Runtime.evaluate', {
+        expression: `globalThis['${slot}']`,
+        returnByValue: true,
+      }, 2000) as { result?: { value?: unknown } };
+
+      const val = check?.result?.value as { v?: string; e?: string } | undefined;
+      if (val && typeof val === 'object') {
+        // Cleanup immediately (deferred timer is backup)
+        void this.sendWithTimeout('Runtime.evaluate', {
+          expression: `delete globalThis['${slot}']`,
+          returnByValue: true,
+        }, 1000).catch(() => {});
+
+        if ('e' in val) return { error: String(val.e) };
+        try {
+          return { value: JSON.parse(val.v as string) };
+        } catch {
+          return { value: val.v };
+        }
+      }
+      await this.sleep(100);
+    }
+
+    // Slot cleanup is handled by the deferred timer inside Hermes
+    return { error: 'Promise did not resolve within ' + CDP_TIMEOUT_MS + 'ms' };
+  }
+
   async send(method: string, params?: unknown): Promise<unknown> {
     return this.sendWithTimeout(method, params, CDP_TIMEOUT_MS);
   }
 
   private async connectToTarget(target: HermesTarget, retries = 5): Promise<void> {
+    let lastError: Error | null = null;
     for (let i = 0; i < retries; i++) {
       if (this.disposed) throw new Error('Client disposed during connection');
       try {
@@ -189,18 +282,29 @@ export class CDPClient {
         await this.setup();
         return;
       } catch (err) {
-        if (err instanceof Error && (err.message.includes('1006') || err.message.includes('refused'))) {
-          this._state = 'disconnected';
-          throw new Error(
-            'CDP connection rejected (code 1006). Another debugger may be connected. ' +
-            'Close React Native DevTools, Flipper, or Chrome DevTools and try again.'
-          );
+        lastError = err instanceof Error ? err : new Error(String(err));
+        // Close stale socket if connectWs succeeded but setup failed
+        if (this.ws) {
+          this.ws.removeAllListeners();
+          if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+            this.ws.close();
+          }
+          this.ws = null;
         }
+        // Connection refused — nothing listening, don't retry
+        if (lastError.message.includes('refused')) {
+          this._state = 'disconnected';
+          throw new Error('CDP connection refused. Is Metro running and the app loaded?');
+        }
+        // Code 1006 and all other errors — retry (1006 is the most common transient failure)
         if (i < retries - 1) await this.sleep(2000);
       }
     }
     this._state = 'disconnected';
-    throw new Error(`Failed to connect after ${retries} attempts`);
+    const hint = lastError?.message.includes('1006')
+      ? ' Another debugger may be connected — close React Native DevTools, Flipper, or Chrome DevTools.'
+      : '';
+    throw new Error(`Failed to connect after ${retries} attempts.${hint}`);
   }
 
   private connectWs(url: string): Promise<void> {
@@ -325,7 +429,18 @@ export class CDPClient {
     const helperResult = await this.evaluate(INJECTED_HELPERS);
     if (helperResult.error) {
       console.error('CDP: failed to inject helpers:', helperResult.error);
+      this._helpersInjected = false;
+      return;
     }
+
+    const verify = await this.evaluate('typeof globalThis.__RN_AGENT === "object"');
+    if (verify.value !== true) {
+      console.error('CDP: helper injection succeeded but __RN_AGENT not found');
+      this._helpersInjected = false;
+      return;
+    }
+
+    this._helpersInjected = true;
 
     if (this._networkMode === 'none') {
       const hookResult = await this.evaluate(NETWORK_HOOK_SCRIPT);
@@ -340,16 +455,17 @@ export class CDPClient {
         this._networkMode = 'hook';
       }
     }
-
-    this._helpersInjected = true;
   }
 
   private setupEventHandlers(): void {
     this.eventHandlers.set('Runtime.consoleAPICalled', (params: unknown) => {
       const p = params as { type: string; args?: Array<{ value?: unknown; description?: string }> };
+      const text = p.args?.map(a => a.value !== undefined ? String(a.value) : (a.description ?? '')).join(' ') ?? '';
+      // Skip internal network hook messages to avoid evicting real console logs
+      if (text.startsWith('__RN_NET__:')) return;
       this._consoleBuffer.push({
         level: p.type,
-        text: p.args?.map(a => a.value !== undefined ? String(a.value) : (a.description ?? '')).join(' ') ?? '',
+        text,
         timestamp: new Date().toISOString(),
       });
     });
@@ -428,7 +544,6 @@ export class CDPClient {
 
     this.reconnect().catch((err) => {
       console.error('CDP: reconnect failed:', err instanceof Error ? err.message : err);
-    }).finally(() => {
       this.reconnecting = false;
     });
   }
@@ -437,9 +552,14 @@ export class CDPClient {
     await this.sleep(RECONNECT_DELAY_MS);
 
     for (let i = 0; i < RECONNECT_ATTEMPTS; i++) {
-      if (this.disposed) return;
+      if (this.disposed) {
+        this.reconnecting = false;
+        return;
+      }
       try {
-        await this.autoConnect();
+        await this.discoverAndConnect();
+        // Clear flag immediately so close events on the new connection trigger a fresh reconnect
+        this.reconnecting = false;
         console.error('CDP: reconnected successfully');
         return;
       } catch {
@@ -448,6 +568,7 @@ export class CDPClient {
         }
       }
     }
+    this.reconnecting = false;
     this._state = 'disconnected';
     console.error('CDP: reconnect failed after ' + RECONNECT_ATTEMPTS + ' attempts');
   }
@@ -475,7 +596,13 @@ export class CDPClient {
       }, ms);
 
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
-      this.ws!.send(JSON.stringify({ id, method, params }));
+      try {
+        this.ws!.send(JSON.stringify({ id, method, params }));
+      } catch (err) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(err instanceof Error ? err : new Error(`ws.send failed: ${err}`));
+      }
     });
   }
 

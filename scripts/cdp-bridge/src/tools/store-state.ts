@@ -1,5 +1,5 @@
 import type { CDPClient } from '../cdp-client.js';
-import { textResult, errorResult, withConnection } from '../utils.js';
+import { okResult, failResult, withConnection } from '../utils.js';
 
 export function createStoreStateHandler(getClient: () => CDPClient) {
   return withConnection(getClient, async (args: { path?: string }, client) => {
@@ -10,35 +10,36 @@ export function createStoreStateHandler(getClient: () => CDPClient) {
     const result = await client.evaluate(expression);
 
     if (result.error) {
-      return errorResult(`Store state error: ${result.error}`);
+      return failResult(`Store state error: ${result.error}`);
     }
 
     if (typeof result.value !== 'string') {
-      return errorResult('Unexpected response from getStoreState — expected JSON string');
-    }
-
-    const raw = result.value;
-
-    if (raw.endsWith('...[TRUNCATED]')) {
-      return textResult(JSON.stringify({
-        warning: 'TRUNCATED',
-        message: 'Store state exceeds 30KB. Use a path parameter to query a specific slice.',
-        partial: raw,
-      }));
+      return failResult('Unexpected response from getStoreState — expected JSON string');
     }
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(result.value);
     } catch {
-      return textResult(raw);
+      return okResult({ raw: result.value });
     }
 
-    if (parsed !== null && typeof parsed === 'object' && '__agent_error' in parsed) {
+    if (parsed !== null && typeof parsed === 'object') {
       const obj = parsed as Record<string, unknown>;
-      return errorResult(`Store state error: ${obj.__agent_error}`);
+      if ('__agent_truncated' in obj) {
+        return okResult(
+          { warning: 'Store state exceeds 30KB. Use a path parameter to query a specific slice.' },
+          { truncated: true, meta: { originalLength: obj.originalLength } },
+        );
+      }
+      if ('__agent_error' in obj) {
+        return failResult(`Store state error: ${obj.__agent_error}`, {
+          hint: obj.hint as string | undefined,
+          hint2: obj.hint2 as string | undefined,
+        });
+      }
     }
 
-    return textResult(raw);
+    return okResult(parsed);
   });
 }

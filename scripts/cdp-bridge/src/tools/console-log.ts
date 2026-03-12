@@ -1,33 +1,42 @@
 import type { CDPClient } from '../cdp-client.js';
-import { textResult, withConnection } from '../utils.js';
-
-const LEVEL_ALIASES: Record<string, string> = {
-  warn: 'warning',
-};
-
-const INTERNAL_PREFIX = '__RN_NET__:';
+import { okResult, failResult, withConnection } from '../utils.js';
 
 export function createConsoleLogHandler(getClient: () => CDPClient) {
   return withConnection(getClient, async (args: { level: string; limit: number; clear: boolean }, client) => {
     if (args.clear) {
-      client.consoleBuffer.clear();
-      return textResult(JSON.stringify({ cleared: true }));
+      const clearResult = await client.evaluate('__RN_AGENT.clearConsole()');
+      if (clearResult.error) {
+        return failResult(`Failed to clear console: ${clearResult.error}`);
+      }
+      return okResult({ cleared: true });
     }
 
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
-    const cdpLevel = LEVEL_ALIASES[args.level] ?? args.level;
+    const level = args.level ?? 'all';
 
-    let entries = cdpLevel === 'all'
-      ? client.consoleBuffer.getLast(client.consoleBuffer.size)
-      : client.consoleBuffer.filter(e => e.level === cdpLevel);
+    const result = await client.evaluate(
+      `__RN_AGENT.getConsole(${JSON.stringify({ level, limit })})`,
+    );
 
-    entries = entries
-      .filter(e => !e.text.startsWith(INTERNAL_PREFIX))
-      .slice(-limit);
+    if (result.error) {
+      return failResult(`Console log error: ${result.error}`);
+    }
 
-    return textResult(JSON.stringify({
-      count: entries.length,
-      entries,
-    }));
+    if (typeof result.value !== 'string') {
+      return failResult('Unexpected response from getConsole — expected JSON string');
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(result.value);
+    } catch {
+      return failResult(`Failed to parse console response: ${result.value.slice(0, 200)}`);
+    }
+
+    if (!Array.isArray(parsed)) {
+      return failResult('Unexpected response from getConsole — expected array');
+    }
+
+    return okResult({ count: parsed.length, entries: parsed });
   });
 }
