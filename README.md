@@ -1,96 +1,145 @@
-# rn-dev-agent (WORK IN PROGRESS)
+# rn-dev-agent
 
-A Claude Code plugin that lets an AI agent fully test React Native features on iOS Simulator / Android Emulator. The agent navigates the app, verifies UI, walks user flows, and confirms internal state (component tree, store data, network responses, navigation stack).
+A Claude Code plugin that turns Claude into a React Native development partner. It explores your codebase, designs architecture, implements features, then **verifies everything live on the simulator** — reading the component tree, store state, and navigation stack through Chrome DevTools Protocol.
 
-This is a **feature verification pipeline** — not a generic automation tool.
+## Quick Start
 
-## Table of Contents
+```bash
+# Install the plugin
+claude plugin add Lykhoyda/react-native-dev-claude-plugin
 
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Setup for Your App](#setup-for-your-app)
-- [Usage](#usage)
-- [Commands Reference](#commands-reference)
-- [MCP Tools Reference](#mcp-tools-reference)
-- [Architecture](#architecture)
-- [Troubleshooting](#troubleshooting)
-- [Documentation](#documentation)
+# Navigate to your React Native project
+cd /path/to/your-rn-app
+
+# Start Claude Code
+claude
+```
+
+On startup the plugin auto-detects your React Native project and installs [maestro-runner](https://github.com/devicelab-dev/maestro-runner) for UI interactions.
+
+Then tell Claude what to build:
+
+```
+/rn-dev-agent:rn-feature-dev add a shopping cart with badge, item list, and checkout flow
+```
+
+That's it. Claude handles the rest.
+
+## How It Works: `/rn-feature-dev`
+
+This is the primary command. It runs an 8-phase development workflow that goes from a feature description to verified, reviewed code with proof screenshots.
+
+| Phase | What happens |
+|-------|-------------|
+| 1. Discovery | Understand the feature request, create a task plan |
+| 2. Exploration | Launch parallel agents to map screens, store, navigation, and conventions |
+| 3. Questions | Ask clarifying questions about edge cases, error states, and data flow |
+| 4. Architecture | Design the implementation with an Opus-powered architect agent, including E2E proof steps |
+| 5. Implementation | Build the feature following the blueprint — store, components, navigation, testIDs |
+| 5.5. Verification | Prove it works live: CDP health check, component tree, store state, interaction test, screenshot |
+| 6. Review | Launch parallel review agents for correctness, RN conventions, and project patterns |
+| 7. Summary | Document what was built, decisions made, files changed, and verification results |
+
+Each phase gates on the previous one. Claude asks for your approval before implementing and before applying review fixes.
+
+### What makes this different
+
+- **Live verification** — After implementation, Claude connects to your running app via CDP, navigates to the feature screen, checks the component tree, exercises interactions, and confirms store state matches expectations. No "trust me it works."
+- **Architect-designed proof flows** — The architect agent (Opus) designs the exact E2E verification steps during Phase 4, including which testIDs to check, which CDP expressions to run, and which screenshots to take. Phase 5.5 executes this plan mechanically.
+- **Parallel exploration** — Phase 2 launches multiple explorer agents simultaneously to map different aspects of your codebase, so Claude understands your patterns before writing a single line.
+
+### Example session
+
+```
+> /rn-dev-agent:rn-feature-dev add task priority levels (high/medium/low) with color coding and sort
+
+Phase 1: I understand you want priority levels on tasks. Creating task plan...
+
+Phase 2: Launching 3 explorer agents...
+  - Explorer 1: Found TasksScreen, tasksSlice, 12 testIDs
+  - Explorer 2: Found Redux Toolkit pattern, createSelector usage
+  - Explorer 3: Found NativeWind styling, chip-based filter pattern
+
+Phase 3: Before I design this, a few questions:
+  1. Should priority be required or optional (default medium)?
+  2. What colors? Red/yellow/green or match your existing theme?
+  3. Sort by priority — should it be a toggle or replace the existing sort?
+
+> default medium, use theme colors, toggle alongside existing sort
+
+Phase 4: Here's the architecture...
+  - Extend tasksSlice with priority field + PRIORITY_WEIGHT map
+  - Add PriorityChip component with cycle-on-press
+  - Composed selector: selectSortedFilteredTasks
+  Proceed with implementation?
+
+> yes
+
+Phase 5: Implementing... [creates/modifies 4 files]
+
+Phase 5.5: Verifying live on simulator...
+  | Check | Result |
+  |-------|--------|
+  | Navigation | PASS — on Tasks screen |
+  | Health | PASS — no errors |
+  | Component tree | PASS — PriorityChip found with priority="medium" |
+  | Interaction | PASS — priority cycled to "high", store confirmed |
+  | Screenshot | PASS — saved to docs/proof/ |
+
+Phase 6: Review agents found 2 issues (both fixed)...
+
+Phase 7: Done. 4 files modified, 3 decisions logged.
+```
+
+## Other Commands
+
+These are useful on their own or alongside `rn-feature-dev`:
+
+| Command | When to use |
+|---------|-------------|
+| `/rn-dev-agent:test-feature <desc>` | Test an already-implemented feature end-to-end |
+| `/rn-dev-agent:build-and-test <desc>` | Build the app first (if not installed), then test |
+| `/rn-dev-agent:debug-screen` | Diagnose a broken screen — gathers evidence and applies a fix |
+| `/rn-dev-agent:check-env` | Verify Metro, CDP, and simulator are ready |
 
 ## Requirements
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Node.js | >= 18 | Required for the CDP bridge MCP server |
-| Claude Code CLI | Latest | `npm install -g @anthropic-ai/claude-code` |
-| Xcode + Simulator | Latest | For iOS testing |
-| Android Studio + Emulator | Latest | For Android testing |
-| Maestro | Latest | `brew install maestro` — for UI interaction flows |
+| Requirement | Notes |
+|-------------|-------|
+| Node.js >= 18 | For the CDP bridge MCP server |
+| Claude Code CLI | `npm install -g @anthropic-ai/claude-code` |
+| iOS Simulator or Android Emulator | At least one platform |
+| Metro dev server running | `npx expo start` or `npx react-native start` |
 
-You need at least one platform (iOS or Android) set up. Both are not required.
-
-**Optional but recommended:** [maestro-runner](https://github.com/devicelab-dev/maestro-runner) — a Go-based Maestro alternative that is 3x faster (no JVM cold start).
-
-## Installation
-
-### Option A: From Plugin Tab (Recommended)
-
-```
-/plugin marketplace add Lykhoyda/react-native-dev-claude-plugin
-/plugin install rn-dev-agent
-```
-
-Then navigate to your React Native project and start Claude Code — the plugin activates automatically.
-
-### Option B: From Source
-
-```bash
-git clone https://github.com/Lykhoyda/react-native-dev-claude-plugin.git
-cd react-native-dev-claude-plugin
-
-# Install MCP server dependencies (dist/ is pre-built, but rebuild after modifying source)
-cd scripts/cdp-bridge && npm install && npm run build && cd ../..
-```
-
-Launch Claude Code with the plugin:
-
-```bash
-cd /path/to/your-react-native-app
-claude --plugin-dir /path/to/react-native-dev-claude-plugin
-```
-
-On startup, if a React Native project is detected (via `package.json` + `metro.config.js`/`app.json`/`app.config.js`/`app.config.ts`), you'll see a message listing available commands.
+**maestro-runner** is auto-installed on first plugin load. It enables real UI interactions (tap, type, swipe) beyond what CDP can do alone.
 
 ## Setup for Your App
 
-### Basic setup (works for most apps)
+### No setup needed for most apps
 
-No app-side changes needed. The plugin connects to your app via Metro's CDP endpoint and inspects the React fiber tree directly.
+The plugin connects to your running app via Metro's CDP endpoint and reads the React fiber tree directly.
 
-### Zustand state inspection
-
-If your app uses Zustand, add one line to your app entry point so the plugin can read store state:
+### Zustand stores (one line)
 
 ```typescript
-// app/_layout.tsx or App.tsx
+// App.tsx or app/_layout.tsx
 if (__DEV__) {
   global.__ZUSTAND_STORES__ = {
     auth: useAuthStore,
     cart: useCartStore,
-    settings: useSettingsStore,
-    // add all stores you want inspectable
   };
 }
 ```
 
-This has zero production cost — the `if (__DEV__)` block is stripped in release builds.
+Zero production cost — stripped in release builds.
 
-### Redux state inspection
+### Redux
 
-Redux is auto-detected via the React fiber tree (finds the `Provider` component and reads the store). No setup needed.
+Auto-detected. No setup needed.
 
-### testID best practices
+### testIDs
 
-For reliable UI queries, add `testID` props to key components:
+Add `testID` to interactive elements for reliable component queries:
 
 ```tsx
 <TouchableOpacity testID="checkout-button" onPress={handleCheckout}>
@@ -98,129 +147,7 @@ For reliable UI queries, add `testID` props to key components:
 </TouchableOpacity>
 ```
 
-The plugin uses `testID` to filter the component tree efficiently, avoiding full tree dumps that waste tokens.
-
-## Usage
-
-### Before testing
-
-1. **Boot a simulator/emulator:**
-   ```bash
-   # iOS
-   xcrun simctl boot "iPhone 16"
-   open -a Simulator
-
-   # Android
-   emulator -avd Pixel_7_API_34
-   ```
-
-2. **Start Metro:**
-   ```bash
-   # Expo
-   npx expo start
-
-   # React Native CLI
-   npx react-native start
-   ```
-
-3. **Launch the app** on the simulator (it should be visible on screen).
-
-4. **Start Claude Code with the plugin:**
-   ```bash
-   cd /path/to/your-rn-app
-   claude --plugin-dir /path/to/react-native-dev-claude-plugin
-   ```
-
-5. **Verify the environment:**
-   ```
-   /rn-dev-agent:check-env
-   ```
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `/rn-dev-agent:test-feature <description>` | Test a feature end-to-end on the simulator/emulator |
-| `/rn-dev-agent:build-and-test <description>` | Build/install app, then test (supports `--eas [profile]`) |
-| `/rn-dev-agent:debug-screen` | Diagnose and fix the current screen |
-| `/rn-dev-agent:check-env` | Verify environment is ready (Metro, CDP, app status) |
-
-### Example: Testing a feature
-
-```
-/rn-dev-agent:test-feature shopping cart — add items, see badge, checkout
-```
-
-The agent runs a 7-step protocol:
-1. **Environment check** — confirms Metro running, CDP connected, no RedBox
-2. **Understand the feature** — reads implementation files, finds testIDs, routes, store slices
-3. **Plan the test** — writes test steps and expected outcomes before executing
-4. **Navigate to start** — uses deep links or Maestro to reach the starting screen
-5. **Execute and verify** — for each step: act (Maestro) -> wait (assertVisible) -> verify UI (component tree) -> verify data (store state + network)
-6. **Edge cases** — tests empty state, error state, back navigation, rapid interactions
-7. **Generate persistent test** — writes `flows/<feature-name>.yaml` Maestro flow for CI
-
-### Example: Debugging a screen
-
-```
-/rn-dev-agent:debug-screen
-```
-
-No need to describe the problem — the agent captures its own evidence:
-1. Takes a screenshot
-2. Gathers errors, console, network, and component tree in parallel
-3. Identifies the error type and narrows down root cause
-4. Applies a fix and verifies recovery
-
-## Commands Reference
-
-### `/rn-dev-agent:check-env`
-
-Runs `cdp_status` and reports on:
-- **Metro**: Dev server running? Which port?
-- **CDP**: Connected to Hermes? Which device/page?
-- **App**: Platform, RN version, Hermes enabled, screen dimensions
-- **Capabilities**: CDP Network domain available? Fiber tree accessible?
-- **Errors**: Active error count, RedBox, debugger paused state
-
-### `/rn-dev-agent:test-feature <description>`
-
-Invokes the `rn-tester` agent with the feature description. The agent discovers changed files via `git diff`, reads the implementation, and runs the 7-step verification protocol. Outputs a pass/fail report and generates a Maestro YAML flow file.
-
-### `/rn-dev-agent:debug-screen`
-
-Invokes the `rn-debugger` agent. Captures parallel evidence from all layers (CDP + native logs), identifies the error type, applies a minimal fix, and verifies recovery.
-
-## MCP Tools Reference
-
-The CDP bridge exposes 10 tools via MCP. These are used by the agents internally, but you can also call them directly in Claude Code:
-
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `cdp_status` | Health check + auto-connect | `metroPort` (optional override) |
-| `cdp_component_tree` | React fiber tree with props/state | `filter` (component name or testID), `depth` (1-6, default 3) |
-| `cdp_navigation_state` | Current route, stack, tabs | None |
-| `cdp_store_state` | Redux/Zustand state | `path` (dot-path, e.g. `"cart.items"`) |
-| `cdp_network_log` | Recent HTTP requests | `limit`, `filter` (URL substring), `clear` |
-| `cdp_console_log` | Console output buffer | `level` (all/log/warn/error/info/debug), `limit`, `clear` |
-| `cdp_error_log` | JS errors + promise rejections | `clear` (reset captured errors) |
-| `cdp_evaluate` | Execute arbitrary JS in Hermes | `expression`, `awaitPromise` |
-| `cdp_reload` | Full reload with auto-reconnect | `full` (always true) |
-| `cdp_dev_settings` | Dev menu actions | `action` (reload/toggleInspector/togglePerfMonitor/dismissRedBox) |
-
-### Direct tool usage examples
-
-```
-> Use cdp_status to check if the app is connected
-> Use cdp_component_tree with filter "CartBadge" to inspect the cart badge
-> Use cdp_store_state with path "auth.user" to check login state
-> Use cdp_network_log with filter "/api/products" to see recent API calls
-> Use cdp_console_log with level "error" to see error output
-```
-
 ## Architecture
-
-Three layers working together:
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -238,7 +165,7 @@ Three layers working together:
 │                        │                             │
 │  ┌─────────────────────▼───────────────────────────┐ │
 │  │           Bash (device lifecycle)                │ │
-│  │  xcrun simctl / adb / Maestro / screenshots      │ │
+│  │  xcrun simctl / adb / maestro-runner / screenshots│ │
 │  └──────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────┘
          │                              │
@@ -248,90 +175,43 @@ Three layers working together:
     └─────────┘                   └───────────┘
 ```
 
-### How it works
+### CDP Bridge MCP Tools
 
-1. **CDP Bridge MCP Server** maintains a WebSocket connection to Metro's CDP endpoint, which proxies to the Hermes JavaScript engine inside your app
-2. On connect, it injects ~2KB of helper JS (`globalThis.__RN_AGENT`) that can walk the React fiber tree, read navigation state, capture errors, etc.
-3. Events (console, network, errors) are buffered in ring buffers between agent calls since MCP is pull-based
-4. **Skills** provide domain knowledge (device commands, testing patterns, debugging strategies)
-5. **Agents** define multi-step protocols (7-step tester, diagnostic debugger)
-6. **Commands** are user-facing entry points that invoke agents
+10 tools available to agents and directly in Claude Code:
 
-### Plugin structure
-
-```
-rn-dev-agent/
-├── .claude-plugin/plugin.json          # Plugin manifest (MCP servers, skills, agents, commands)
-├── skills/
-│   ├── rn-device-control/SKILL.md      # simctl, adb, screenshots, UI hierarchy
-│   ├── rn-testing/SKILL.md             # Maestro patterns, timing, testID usage
-│   └── rn-debugging/SKILL.md           # CDP vs bash, error types, troubleshooting
-├── agents/
-│   ├── rn-tester.md                    # 7-step test verification protocol
-│   └── rn-debugger.md                  # Diagnostic evidence-gathering flow
-├── commands/
-│   ├── test-feature.md                 # /rn-dev-agent:test-feature
-│   ├── build-and-test.md               # /rn-dev-agent:build-and-test
-│   ├── debug-screen.md                 # /rn-dev-agent:debug-screen
-│   └── check-env.md                    # /rn-dev-agent:check-env
-├── hooks/hooks.json                    # SessionStart: auto-detect RN projects
-├── scripts/
-│   ├── cdp-bridge/                     # MCP server (TypeScript)
-│   │   ├── src/
-│   │   │   ├── index.ts                # Entry + 10 tool registrations
-│   │   │   ├── cdp-client.ts           # WebSocket lifecycle, auto-discovery
-│   │   │   ├── injected-helpers.ts     # globalThis.__RN_AGENT helpers
-│   │   │   ├── ring-buffer.ts          # Event buffering
-│   │   │   ├── types.ts               # Shared types + MCP response helpers
-│   │   │   └── tools/                  # Individual tool handlers
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   ├── eas_resolve_artifact.sh          # EAS build artifact resolver
-│   ├── expo_ensure_running.sh          # App install + Metro start
-│   └── snapshot_state.sh               # Screenshot + UI hierarchy capture
-├── hooks/
-│   ├── hooks.json                      # SessionStart hook config
-│   └── detect-rn-project.sh            # Auto-detect RN projects
-└── docs/
-    ├── ROADMAP.md                      # Implementation phases
-    ├── DECISIONS.md                    # Architectural decision records
-    └── BUGS.md                         # Known issues
-```
+| Tool | Purpose |
+|------|---------|
+| `cdp_status` | Health check + auto-connect |
+| `cdp_component_tree` | React fiber tree (filtered by component name or testID) |
+| `cdp_navigation_state` | Current route, stack, tabs |
+| `cdp_store_state` | Redux/Zustand state at a dot-path |
+| `cdp_network_log` | Recent HTTP requests |
+| `cdp_console_log` | Console output buffer |
+| `cdp_error_log` | JS errors + promise rejections |
+| `cdp_evaluate` | Execute JS in Hermes |
+| `cdp_reload` | Full reload with auto-reconnect |
+| `cdp_dev_settings` | Dev menu actions |
 
 ## Troubleshooting
 
-### Connection issues
-
-| Problem | Cause | Solution |
-|---------|-------|----------|
-| "Metro not found" | Dev server not running | Start Metro: `npx expo start` or `npx react-native start` |
-| "No Hermes target" | App not loaded or not using Hermes | Open the app on simulator, ensure Hermes is enabled |
-| CDP connection rejected (1006) | Another debugger holds the session | Close React Native DevTools, Flipper, or Chrome DevTools |
-| "WebSocket closed" during operations | App reloaded while query was in flight | Retry — the server auto-reconnects |
-
-### Tool-specific issues
-
 | Problem | Solution |
 |---------|----------|
-| `cdp_evaluate` timeout | Check for `debugger;` statements or long sync operations |
-| `cdp_component_tree` returns empty | Use a broader `filter` or check that components have rendered |
-| `cdp_store_state` returns error for Zustand | Add `global.__ZUSTAND_STORES__` to your app entry |
-| Empty error log but app crashed | Error is native — use `adb logcat -b crash` or `xcrun simctl spawn booted log stream --predicate 'logType == error'` |
-| `cdp_network_log` shows no requests | On RN < 0.83, network hooks inject automatically on first call |
+| "Metro not found" | Start Metro: `npx expo start` or `npx react-native start` |
+| "No Hermes target" | Open the app on simulator, ensure Hermes is enabled |
+| CDP connection rejected (1006) | Close React Native DevTools, Flipper, or Chrome DevTools |
+| `cdp_store_state` error for Zustand | Add `global.__ZUSTAND_STORES__` to your app entry |
+| Empty error log but app crashed | Native crash — use `adb logcat -b crash` or Xcode console |
+| Plugin not detected | Pass `--plugin-dir` pointing to this repo, or install via marketplace |
+| maestro-runner not in PATH | `export PATH="$HOME/.maestro-runner/bin:$PATH"` |
 
-### Environment issues
+## Install from Source
 
-| Problem | Solution |
-|---------|----------|
-| `node dist/index.js` fails | Run `npm run build` in `scripts/cdp-bridge/` |
-| Maestro not found | `brew install maestro` |
-| Multiple simulators/emulators | The plugin connects to the first booted device. Use `ANDROID_SERIAL` env var for Android targeting |
-| Plugin not detected on startup | Ensure you pass `--plugin-dir` pointing to this repo's root |
+```bash
+git clone https://github.com/Lykhoyda/react-native-dev-claude-plugin.git
+cd react-native-dev-claude-plugin
+cd scripts/cdp-bridge && npm install && npm run build && cd ../..
 
-## Documentation
-
-| Document | Contents |
-|----------|----------|
-| `docs/ROADMAP.md` | Implementation phases and completion status |
-| `docs/DECISIONS.md` | 49 architectural decision records (D1-D49) |
-| `docs/BUGS.md` | Known issues and workarounds |
+# Then use with any RN project
+cd /path/to/your-rn-app
+claude --plugin-dir /path/to/react-native-dev-claude-plugin
+```
