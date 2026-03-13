@@ -29,6 +29,7 @@ export type TabParams = {
 
 export type RootStackParams = {
   Tabs: NavigatorScreenParams<TabParams>;
+  ProfileEditModal: undefined;
   ErrorLab: undefined;
   DeepLink: { id: string };
 };

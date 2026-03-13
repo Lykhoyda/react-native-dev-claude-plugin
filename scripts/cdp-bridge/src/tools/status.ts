@@ -1,6 +1,6 @@
 import type { CDPClient } from '../cdp-client.js';
 import type { StatusResult } from '../types.js';
-import { okResult, failResult } from '../utils.js';
+import { okResult, failResult, warnResult } from '../utils.js';
 
 const STATUS_PROBE_EXPRESSION = `
 (function() {
@@ -85,6 +85,10 @@ export function createStatusHandler(
           networkFallback: client.networkMode === 'hook',
         },
       };
+
+      if (status.app.dev === false) {
+        return warnResult(status, 'Connected to a JS context where __DEV__ is false. This may not be the app\'s main context. Try cdp_reload(full=true) or restart Metro.');
+      }
 
       return okResult(status);
     } catch (err) {

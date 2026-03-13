@@ -22,11 +22,15 @@ const userSlice = createSlice({
     updateName: (state, action: PayloadAction<string>) => {
       state.name = action.payload;
     },
+    updateProfile: (state, action: PayloadAction<{ name: string; email: string }>) => {
+      state.name = action.payload.name;
+      state.email = action.payload.email;
+    },
     setLoggedIn: (state, action: PayloadAction<boolean>) => {
       state.loggedIn = action.payload;
     },
   },
 });
 
-export const { updateName, setLoggedIn } = userSlice.actions;
+export const { updateName, updateProfile, setLoggedIn } = userSlice.actions;
 export default userSlice;

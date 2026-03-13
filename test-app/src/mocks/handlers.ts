@@ -26,6 +26,10 @@ export const handlers = [
     });
   }),
 
+  http.post(`${BASE_URL}/api/user/profile`, () => {
+    return HttpResponse.json({ success: true });
+  }),
+
   http.post(`${BASE_URL}/api/notifications/read`, () => {
     return new HttpResponse(null, { status: 204 });
   }),

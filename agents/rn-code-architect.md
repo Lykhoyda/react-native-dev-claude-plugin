@@ -110,3 +110,32 @@ Note: `navigationAction` is preferred over `entryRoute` because deep links
 trigger native confirmation dialogs in Expo Go (see B56). The agent uses
 `cdp_evaluate` with the `navigationAction` expression first, falling back
 to `entryRoute` deep link only if `__NAV_REF__` is unavailable.
+
+### 9. E2E Proof Flow
+
+This section is mandatory. Define the exact step-by-step user journey that
+Phase 8 will execute to produce permanent proof screenshots. The architect
+has full feature context and must specify this upfront — Phase 8 executes
+mechanically and must not improvise.
+
+Design the flow to cover:
+- The **happy path** (primary user journey from start to result)
+- At least one **state transition** (before/after an interaction)
+- At least one **edge case or secondary flow** (e.g., empty state, validation error, toggle back)
+
+Format as a numbered table:
+```
+| Step | Action | testID / CDP | Screenshot | Expected State |
+|------|--------|-------------|------------|----------------|
+| 1 | Navigate to feature screen | __NAV_REF__.navigate('...') | 01-initial.jpg | Route confirmed, components rendered |
+| 2 | <primary interaction> | <testID> press | 02-<desc>.jpg | store.path = <value> |
+| 3 | <secondary interaction> | <testID> press/typeText | 03-<desc>.jpg | <visual or state change> |
+| 4 | <edge case or toggle back> | <testID> press | 04-<desc>.jpg | <expected result> |
+```
+
+Rules:
+- Minimum 3 steps, aim for 4-5
+- Every step must specify the exact testID or CDP expression to use
+- Every step must specify the expected state or visual outcome to verify
+- Screenshot filenames must be numbered and descriptive (e.g., `03-sorted-by-priority.jpg`)
+- Include CDP state assertions (store path + expected value) for steps that change state

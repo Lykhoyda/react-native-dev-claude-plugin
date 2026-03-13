@@ -1,4 +1,4 @@
-import { okResult, failResult } from '../utils.js';
+import { okResult, failResult, warnResult } from '../utils.js';
 const STATUS_PROBE_EXPRESSION = `
 (function() {
   var result = { appInfo: null, errorCount: 0, fiberTree: false, hasRedBox: false };
@@ -68,6 +68,9 @@ export function createStatusHandler(getClient, setClient, createClient) {
                     networkFallback: client.networkMode === 'hook',
                 },
             };
+            if (status.app.dev === false) {
+                return warnResult(status, 'Connected to a JS context where __DEV__ is false. This may not be the app\'s main context. Try cdp_reload(full=true) or restart Metro.');
+            }
             return okResult(status);
         }
         catch (err) {

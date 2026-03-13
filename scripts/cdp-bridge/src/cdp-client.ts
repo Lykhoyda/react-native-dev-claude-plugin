@@ -36,6 +36,7 @@ export class CDPClient {
   private _connectedTarget: HermesTarget | null = null;
   private _state: CDPClientState = 'disconnected';
   private _connectionGeneration = 0;
+  private _softReconnectRequested = false;
 
   constructor(port?: number) {
     this._port = port ?? 8081;
@@ -157,15 +158,86 @@ export class CDPClient {
       );
     }
 
-    const target = validTargets.reduce((a, b) => {
+    // Sort by descending page ID (highest = most recent session)
+    const sorted = [...validTargets].sort((a, b) => {
       const aPage = parseInt(a.id?.split('-')[1] ?? '0', 10);
       const bPage = parseInt(b.id?.split('-')[1] ?? '0', 10);
-      return bPage > aPage ? b : a;
+      return bPage - aPage;
     });
 
-    await this.connectToTarget(target);
+    // Try each target, verify __DEV__ is true (correct app JS context)
+    let connectedTarget: HermesTarget | null = null;
+    for (const candidate of sorted) {
+      try {
+        await this.connectToTarget(candidate);
+        // Probe __DEV__ to verify we're in the app's main JS context
+        const devCheck = await this.evaluate('typeof __DEV__ !== "undefined" && __DEV__ === true');
+        if (devCheck.value === true) {
+          connectedTarget = candidate;
+          break;
+        }
+        // Wrong context — disconnect and try next target
+        console.error(`CDP: target ${candidate.id} (${candidate.title}) has __DEV__=${devCheck.value}, skipping`);
+        if (sorted.indexOf(candidate) < sorted.length - 1) {
+          if (this.ws) {
+            this.ws.removeAllListeners();
+            if (this.ws.readyState === WebSocket.OPEN) this.ws.close();
+            this.ws = null;
+          }
+          this._state = 'disconnected';
+          this._helpersInjected = false;
+          this._connectedTarget = null;
+          continue;
+        }
+        // Last target — use it anyway with a warning
+        console.error('CDP: no target with __DEV__=true found, using last available target');
+        connectedTarget = candidate;
+      } catch (err) {
+        // Connection failed — try next target if available
+        if (sorted.indexOf(candidate) < sorted.length - 1) continue;
+        throw err;
+      }
+    }
+
     this._connectionGeneration++;
-    return `Connected to ${target.title} on port ${metroPort}`;
+    return `Connected to ${connectedTarget!.title} on port ${metroPort}`;
+  }
+
+  async softReconnect(): Promise<string> {
+    if (this.disposed) throw new Error('Client is disposed');
+
+    // Preempt any background reconnect loop — signal it to bail out
+    if (this.reconnecting) {
+      this._softReconnectRequested = true;
+      const bailDeadline = Date.now() + 3_000;
+      while (this.reconnecting && Date.now() < bailDeadline) {
+        await this.sleep(200);
+      }
+      this._softReconnectRequested = false;
+    }
+
+    this.reconnecting = true;
+    try {
+      this._state = 'disconnected';
+      this._helpersInjected = false;
+      this._connectedTarget = null;
+
+      if (this.ws) {
+        this.ws.removeAllListeners();
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.close();
+        }
+        this.ws = null;
+      }
+
+      this.rejectAllPending(new Error('Stale target — re-discovering'));
+      const result = await this.discoverAndConnect();
+      this.reconnecting = false;
+      return result;
+    } catch (err) {
+      this.reconnecting = false;
+      throw err;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -275,7 +347,7 @@ export class CDPClient {
   private async connectToTarget(target: HermesTarget, retries = 5): Promise<void> {
     let lastError: Error | null = null;
     for (let i = 0; i < retries; i++) {
-      if (this.disposed) throw new Error('Client disposed during connection');
+      if (this.disposed || this._softReconnectRequested) throw new Error('Client disposed or preempted during connection');
       try {
         await this.connectWs(target.webSocketDebuggerUrl);
         this._connectedTarget = target;
@@ -552,7 +624,7 @@ export class CDPClient {
     await this.sleep(RECONNECT_DELAY_MS);
 
     for (let i = 0; i < RECONNECT_ATTEMPTS; i++) {
-      if (this.disposed) {
+      if (this.disposed || this._softReconnectRequested) {
         this.reconnecting = false;
         return;
       }
@@ -564,6 +636,10 @@ export class CDPClient {
         return;
       } catch {
         if (i < RECONNECT_ATTEMPTS - 1) {
+          if (this._softReconnectRequested) {
+            this.reconnecting = false;
+            return;
+          }
           await this.sleep(RECONNECT_RETRY_MS);
         }
       }

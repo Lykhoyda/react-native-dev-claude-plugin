@@ -9,7 +9,7 @@ argument-hint: [feature-description]
 You are helping a developer implement a new feature in a React Native app.
 Follow this systematic approach: understand the codebase deeply, ask about
 all ambiguities, design an elegant architecture, implement, verify live on
-the simulator, and review quality.
+the simulator, review quality, and produce E2E proof with screenshots.
 
 ## Core Principles
 
@@ -32,7 +32,7 @@ the simulator, and review quality.
 Initial request: $ARGUMENTS
 
 **Actions**:
-1. Create a todo list with all 8 phases (1, 2, 3, 4, 5, 5.5, 6, 7)
+1. Create a todo list with all 9 phases (1, 2, 3, 4, 5, 5.5, 6, 7, 8)
 2. If the feature is unclear, ask the user:
    - What problem does this solve?
    - What screen is the entry point?
@@ -40,7 +40,7 @@ Initial request: $ARGUMENTS
    - Are there API calls involved?
 3. Summarize your understanding and confirm with the user
 
-**Evaluator**: Initialize report — record feature name, slug, start time per `dev/evaluator.md` Phase 1.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, initialize report — record feature name, slug, start time per `dev/evaluator.md` Phase 1.
 
 ---
 
@@ -62,7 +62,7 @@ Initial request: $ARGUMENTS
 2. Once agents return, read all files they identified
 3. Present a comprehensive summary of findings
 
-**Evaluator**: Log agent launches and files identified per `dev/evaluator.md` Phase 2.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, log agent launches and files identified per `dev/evaluator.md` Phase 2.
 
 ---
 
@@ -82,13 +82,14 @@ Initial request: $ARGUMENTS
    - Store: new slice or extend existing? Redux or Zustand?
    - testIDs: any specific naming convention to follow?
    - Backward compatibility: does this change existing behavior?
+   - E2E proof: any specific user flows or edge cases that must be proven?
 3. **Present all questions in a clear, organized list**
 4. **Wait for answers before proceeding to Phase 4**
 
 If the user says "whatever you think is best", provide your recommendation
 and get explicit confirmation.
 
-**Evaluator**: Log question counts per `dev/evaluator.md` Phase 3.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, log question counts per `dev/evaluator.md` Phase 3.
 
 ---
 
@@ -99,17 +100,25 @@ and get explicit confirmation.
 **Actions**:
 1. Launch 1–2 `rn-code-architect` agents with the feature spec, explorer
    findings, and user answers. Ask for a complete blueprint including the
-   mandatory **Verification Parameters** section.
+   mandatory **Verification Parameters** and **E2E Proof Flow** sections.
 2. Review the blueprint and form your opinion on fit
-3. Present to user:
+3. **Verify the E2E Proof Flow** section exists and has:
+   - At least 3 steps with specific testIDs/CDP expressions
+   - Expected state assertions for each state-changing step
+   - Numbered screenshot filenames
+   - At least one edge case or secondary flow
+   If the architect omitted or under-specified the proof flow, add it yourself
+   before presenting to the user — you have the feature context now.
+4. Present to user:
    - What will be built (one paragraph)
    - Files to create/modify (list)
+   - E2E Proof Flow table (from the blueprint)
    - Whether a full reload or Fast Refresh is sufficient
    - Any trade-offs worth noting
-4. **Ask: "Proceed with implementation?"**
-5. **Do NOT start Phase 5 without explicit user approval**
+5. **Ask: "Proceed with implementation?"**
+6. **Do NOT start Phase 5 without explicit user approval**
 
-**Evaluator**: Log agent launches and blueprint completeness per `dev/evaluator.md` Phase 4.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, log agent launches and blueprint completeness per `dev/evaluator.md` Phase 4.
 
 ---
 
@@ -131,7 +140,7 @@ and get explicit confirmation.
      for reconnection
    - Otherwise: wait 2 seconds for Fast Refresh to apply
 
-**Evaluator**: Log files changed, reload type, and cdp_reload result per `dev/evaluator.md` Phase 5.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, log files changed, reload type, and cdp_reload result per `dev/evaluator.md` Phase 5.
 
 ---
 
@@ -201,9 +210,16 @@ adb exec-out screencap -p > /tmp/rn-feature-verify.png
 Call `cdp_status`. Gate on:
 - `metro.running` = true
 - `cdp.connected` = true
+- `app.dev` = true (not false)
 - `app.hasRedBox` = false
 - `app.isPaused` = false
 - `app.errorCount` = 0
+
+If `app.dev` is false: CDP is connected to the wrong JS context (common in
+RN 0.76+ Bridgeless mode with multiple Hermes targets). Call
+`cdp_reload(full=true)` to force reconnection — the target selection now
+probes `__DEV__` on each candidate. If still false after reload, ask the
+user to restart Metro.
 
 If `isPaused` is true: call `cdp_reload(full=true)` to recover, then
 restart Phase 5.5 from Step 0.
@@ -280,7 +296,7 @@ Present results as a table (use the actual screenshot path for the platform):
 **Gate**: All checks must be PASS (or SKIP where not applicable)
 before proceeding to Phase 6.
 
-**Evaluator**: Log every CDP tool call, recovery action, and fix-retry loop per `dev/evaluator.md` Phase 5.5.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, log every CDP tool call, recovery action, and fix-retry loop per `dev/evaluator.md` Phase 5.5.
 
 ---
 
@@ -305,7 +321,7 @@ before proceeding to Phase 6.
 5. Apply approved fixes
 6. If fixes were applied, re-run Phase 5.5 verification to confirm nothing broke
 
-**Evaluator**: Log agent launches, findings, and re-verification per `dev/evaluator.md` Phase 6. If re-verification ran, log as Phase 5.5-retry.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, log agent launches, findings, and re-verification per `dev/evaluator.md` Phase 6. If re-verification ran, log as Phase 5.5-retry.
 
 ---
 
@@ -314,17 +330,120 @@ before proceeding to Phase 6.
 **Goal**: Document what was accomplished.
 
 **Actions**:
-1. Mark all todos complete
-2. Summarize:
+1. Summarize:
    - **What was built** (one paragraph)
    - **Files created/modified** (table with file path + change type)
    - **Key decisions made** (align with docs/DECISIONS.md format)
    - **Verification results** (the Phase 5.5 table)
    - **Review findings** (count fixed / count deferred)
-   - **Suggested next step**: "Run `/rn-dev-agent:test-feature <feature-name>`
-     for full end-to-end verification with Maestro flows and edge case coverage"
 
-**Evaluator**: Finalize and write the evaluation report per `dev/evaluator.md` Phase 7. Append high-confidence bugs to `docs/BUGS.md`.
+**Evaluator**: If `dev/evaluator.md` exists in the plugin root, finalize and write the evaluation report per `dev/evaluator.md` Phase 7. Append high-confidence bugs to `docs/BUGS.md`.
+
+---
+
+## Phase 8: E2E Proof
+
+**Goal**: Produce a permanent proof artifact showing the feature works end-to-end,
+with screenshots of each step of the user flow.
+
+**CRITICAL**: This phase executes the **E2E Proof Flow** designed by the architect
+in Phase 4 — step by step, mechanically. Do NOT improvise the flow, skip steps,
+or simplify the sequence. The architect (Opus) designed this flow with full feature
+context. Your job is to execute it faithfully and capture the evidence.
+
+The output is a `docs/proof/<feature-slug>/` directory with numbered screenshots
+and a `PROOF.md` summary.
+
+**Actions**:
+
+### Step 1: Prepare proof directory
+
+```bash
+mkdir -p docs/proof/<feature-slug>
+```
+
+Use the feature slug from Phase 1 (e.g., `s4-notification-snooze`, `profile-edit-modal`).
+
+### Step 2: Execute the E2E Proof Flow from the blueprint
+
+Read the **E2E Proof Flow** table from the Phase 4 blueprint. For each row
+in the table, execute in order:
+
+1. **Perform the action** exactly as specified:
+   - Navigation: use `cdp_evaluate` with the expression from the table
+   - Interaction: use `cdp_interact(testID="<testID>", action="<action>")`
+     or `cdp_interact(testID="<testID>", action="typeText", text="<input>")`
+   - Wait 1-2 seconds for state to settle
+
+2. **Capture the screenshot** using the exact filename from the table:
+   ```bash
+   # iOS
+   xcrun simctl io booted screenshot --type=jpeg docs/proof/<feature-slug>/<filename>
+   # Android
+   adb exec-out screencap -p > docs/proof/<feature-slug>/<filename>
+   ```
+
+3. **Verify the expected state** as specified in the table:
+   - If the table specifies a store assertion: call `cdp_store_state` and
+     verify the value matches
+   - If the table specifies a navigation assertion: call `cdp_navigation_state`
+   - If the table specifies a visual assertion: verify via the screenshot
+   - Record the actual value for the PROOF.md
+
+4. **If a step fails**: fix the issue and retry that step. Do NOT skip steps
+   or proceed with a failing assertion. Maximum 2 retries per step before
+   escalating to the user.
+
+Execute ALL rows in the table. Do not stop early or skip "optional" steps —
+the architect included them for a reason.
+
+### Step 3: Write PROOF.md
+
+Create `docs/proof/<feature-slug>/PROOF.md` with this structure:
+
+```markdown
+# <Feature Name> — E2E Proof
+
+**Date:** <YYYY-MM-DD>
+**Device:** <device name> (<OS version>, Simulator/Emulator)
+**Method:** CDP interactions + screenshots (flow designed by architect in Phase 4)
+
+## Flow
+
+| Step | Screenshot | Action | Verification |
+|------|-----------|--------|--------------|
+| 1 | 01-initial.jpg | Navigate to <screen> | Route confirmed via cdp_navigation_state |
+| 2 | 02-action.jpg | <interaction description> | <state or visual confirmation> |
+| 3 | 03-result.jpg | <interaction description> | <state or visual confirmation> |
+
+## Key State Snapshots
+
+- After step 2: `store.path = <value>`
+- After step 3: `store.path = <value>`
+
+## Deviations from Plan
+
+List any steps where the actual result differed from the architect's expected
+state, or any steps that required retries. If none, write "None — all steps
+matched the architect's E2E Proof Flow."
+
+## Files
+
+- `01-initial.jpg` — <description>
+- `02-action.jpg` — <description>
+- `03-result.jpg` — <description>
+```
+
+### Step 4: Mark complete
+
+Mark all todos complete. The feature is done — implemented, verified, reviewed,
+and proven with screenshots.
+
+**Gate**: PROOF.md exists, contains screenshots for ALL steps in the architect's
+E2E Proof Flow, and all state assertions match. If screenshot capture fails
+(e.g., no simulator), log the failure in PROOF.md and note it in the Phase 7
+summary. If a state assertion doesn't match, this is a bug — fix it before
+completing.
 
 ---
 

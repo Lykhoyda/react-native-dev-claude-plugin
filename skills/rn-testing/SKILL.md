@@ -1,6 +1,6 @@
 ---
 name: rn-testing
-description: This skill should be used when the user asks to "write a Maestro test", "create E2E flows", "add testIDs", "run UI tests", "set up maestro-runner", "mock network requests", "inspect store state", "write test assertions", or needs guidance on test timing rules, flow structure, multi-device testing, network mocking, Zustand inspection, or component tree queries for React Native apps.
+description: This skill should be used when the user asks to "write a Maestro test", "create E2E flows", "add testIDs", "run UI tests", "run E2E tests", "verify a feature works", "test my screen", "set up maestro-runner", "mock network requests", "inspect store state", "write test assertions", or needs guidance on test timing rules, flow structure, multi-device testing, network mocking, Zustand inspection, or component tree queries for React Native apps.
 ---
 
 # rn-testing — Maestro Patterns, Timing Rules, and Test Strategy
@@ -83,6 +83,9 @@ If no visual indicator exists after an action, add an explicit delay:
 # bash: sleep 0.7
 # cdp_store_state
 ```
+
+After code changes, Fast Refresh triggers automatically. Wait 1-2 seconds
+before querying CDP state, or call `cdp_reload` for a full reload.
 
 ---
 
@@ -241,47 +244,21 @@ Use `cdp_dev_settings` for programmatic control:
 
 ## Network Mocking (for API-dependent features)
 
-```typescript
-// In the app code (dev only) — add to app entry point:
-if (__DEV__ && !global.__RN_AGENT_FETCH_PATCHED__) {
-  global.__RN_AGENT_FETCH_PATCHED__ = true;
-  const origFetch = global.fetch;
-  global.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const mocks = global.__RN_AGENT_MOCKS__;
-    if (!mocks) return origFetch(input, init);
-
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof Request
-        ? input.url
-        : input.toString();
-
-    if (mocks[url]) {
-      return Promise.resolve(
-        new Response(JSON.stringify(mocks[url]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    }
-    return origFetch(input, init);
-  };
-}
-```
-
-The agent injects mocks via CDP before navigating to the screen under test:
+Inject mocks via CDP before navigating to the screen under test:
 ```
 cdp_evaluate:
   expression: 'global.__RN_AGENT_MOCKS__ = { "https://api.example.com/products": [{ id: 1, name: "Test" }] }'
 ```
+
+For the full app-side fetch-patching setup, multiple-URL mocking, and error
+simulation, consult **`references/network-mocking-setup.md`**.
 
 ---
 
 ## Zustand Store Inspection Setup
 
 Zustand v4+ uses `useSyncExternalStore`, NOT React Context. Fiber tree walking
-cannot detect Zustand stores. This 1-line setup registers store hooks for
-the MCP tool to call `.getState()` on at query time:
+cannot detect Zustand stores. Register store hooks for the MCP tool:
 
 ```typescript
 // app/_layout.tsx or App.tsx — register the store hooks (not state snapshots)
@@ -294,19 +271,11 @@ if (__DEV__) {
 }
 ```
 
-The `cdp_store_state` MCP tool calls `store.getState()` on each registered
-hook at the moment of the query, so results are always fresh:
+`cdp_store_state` calls `.getState()` on each registered hook at query time:
 ```
 cdp_store_state(path="cart.items")     # reads useCartStore.getState().items
 cdp_store_state(path="auth")           # reads full useAuthStore.getState()
 ```
-
----
-
-## After Code Changes
-
-When Claude Code saves a file, Fast Refresh triggers automatically. Wait 1-2
-seconds for it to complete before querying CDP state, or call `cdp_reload`.
 
 ---
 

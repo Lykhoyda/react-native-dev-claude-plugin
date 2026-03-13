@@ -9,12 +9,15 @@ import {
   removeTask,
   setFilter,
   markAllSynced,
-  selectFilteredTasks,
+  cyclePriority,
+  toggleSort,
+  selectSortedFilteredTasks,
   selectUnsyncedCount,
   selectActiveTaskCount,
   selectCurrentFilter,
+  selectCurrentSort,
 } from '../store/slices/tasksSlice';
-import type { TaskFilter, TaskItem } from '../store/slices/tasksSlice';
+import type { TaskFilter, TaskItem, TaskPriority } from '../store/slices/tasksSlice';
 import { useThemeColors } from '../hooks/useThemeColors';
 
 const API_BASE = 'https://api.testapp.local';
@@ -25,13 +28,20 @@ const FILTERS: { key: TaskFilter; label: string }[] = [
   { key: 'done', label: 'Done' },
 ];
 
+const PRIORITY_STYLES: Record<TaskPriority, { bg: string; text: string; label: string }> = {
+  high: { bg: 'bg-red-100', text: 'text-red-700', label: 'High' },
+  medium: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Med' },
+  low: { bg: 'bg-green-100', text: 'text-green-700', label: 'Low' },
+};
+
 type Props = NativeStackScreenProps<TasksStackParams, 'TasksMain'>;
 
 export default function TasksScreen(_props: Props) {
   const dispatch = useDispatch();
   const [text, setText] = useState('');
-  const filteredTasks = useSelector(selectFilteredTasks);
+  const filteredTasks = useSelector(selectSortedFilteredTasks);
   const currentFilter = useSelector(selectCurrentFilter);
+  const currentSort = useSelector(selectCurrentSort);
   const unsyncedCount = useSelector(selectUnsyncedCount);
   const activeCount = useSelector(selectActiveTaskCount);
   const colors = useThemeColors();
@@ -53,43 +63,54 @@ export default function TasksScreen(_props: Props) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       dispatch(markAllSynced());
     } catch (err) {
-      console.error('[Tasks] sync failed:', err);
+      if (__DEV__) console.error('[Tasks] sync failed:', err);
     }
   };
 
-  const renderItem = useCallback(({ item, index }: { item: TaskItem; index: number }) => (
-    <View
-      testID={`task-item-${index}`}
-      className={`mb-2 flex-row items-center rounded-lg p-4 ${item.done ? colors.card : `${colors.bg} border ${colors.border}`}`}
-    >
-      <Pressable
-        testID={`task-toggle-${index}`}
-        className={`h-6 w-6 rounded-full border-2 items-center justify-center ${item.done ? 'border-green-500 bg-green-500' : colors.border}`}
-        onPress={() => dispatch(toggleTask(item.id))}
+  const renderItem = useCallback(({ item }: { item: TaskItem }) => {
+    const ps = PRIORITY_STYLES[item.priority];
+    return (
+      <View
+        testID={`task-item-${item.id}`}
+        className={`mb-2 flex-row items-center rounded-lg p-4 ${item.done ? colors.card : `${colors.bg} border ${colors.border}`}`}
       >
-        {item.done && <Text className="text-xs text-white">✓</Text>}
-      </Pressable>
+        <Pressable
+          testID={`task-toggle-${item.id}`}
+          className={`h-6 w-6 rounded-full border-2 items-center justify-center ${item.done ? 'border-green-500 bg-green-500' : colors.border}`}
+          onPress={() => dispatch(toggleTask(item.id))}
+        >
+          {item.done && <Text className="text-xs text-white">✓</Text>}
+        </Pressable>
 
-      <Text
-        testID={`task-title-${index}`}
-        className={`ml-3 flex-1 ${item.done ? `${colors.muted} line-through` : colors.text}`}
-      >
-        {item.title}
-      </Text>
+        <Pressable
+          testID={`task-priority-${item.id}`}
+          className={`ml-2 rounded-full px-2 py-0.5 ${ps.bg}`}
+          onPress={() => dispatch(cyclePriority(item.id))}
+        >
+          <Text className={`text-xs font-semibold ${ps.text}`}>{ps.label}</Text>
+        </Pressable>
 
-      {!item.synced && (
-        <View testID={`task-unsynced-${index}`} className="mr-2 h-2 w-2 rounded-full bg-orange-400" />
-      )}
+        <Text
+          testID={`task-title-${item.id}`}
+          className={`ml-2 flex-1 ${item.done ? colors.muted : colors.text} ${item.done ? 'line-through' : ''}`}
+        >
+          {item.title}
+        </Text>
 
-      <Pressable
-        testID={`task-remove-${index}`}
-        className="ml-2 h-6 w-6 items-center justify-center rounded-full bg-red-100"
-        onPress={() => dispatch(removeTask(item.id))}
-      >
-        <Text className="text-xs text-red-500">✕</Text>
-      </Pressable>
-    </View>
-  ), [dispatch, colors]);
+        {!item.synced && (
+          <View testID={`task-unsynced-${item.id}`} className="mr-2 h-2 w-2 rounded-full bg-orange-400" />
+        )}
+
+        <Pressable
+          testID={`task-remove-${item.id}`}
+          className="ml-2 h-6 w-6 items-center justify-center rounded-full bg-red-100"
+          onPress={() => dispatch(removeTask(item.id))}
+        >
+          <Text className="text-xs text-red-500">✕</Text>
+        </Pressable>
+      </View>
+    );
+  }, [dispatch, colors]);
 
   return (
     <View testID="task-screen" className={`flex-1 ${colors.bg} px-4 pt-4`}>
@@ -117,7 +138,7 @@ export default function TasksScreen(_props: Props) {
         </Pressable>
       </View>
 
-      <View testID="task-filters" className="mt-3 flex-row gap-2">
+      <View testID="task-filters" className="mt-3 flex-row flex-wrap gap-2">
         {FILTERS.map((f) => (
           <Pressable
             key={f.key}
@@ -130,6 +151,18 @@ export default function TasksScreen(_props: Props) {
             </Text>
           </Pressable>
         ))}
+        <Pressable
+          testID="task-sort-btn"
+          className={`rounded-full px-4 py-1.5 ${currentSort === 'priority' ? 'bg-purple-500' : colors.card}`}
+          onPress={() => dispatch(toggleSort())}
+        >
+          <Text
+            testID="task-sort-label"
+            className={currentSort === 'priority' ? 'font-semibold text-white' : colors.text}
+          >
+            {currentSort === 'priority' ? 'Sort: Priority' : 'Sort: Default'}
+          </Text>
+        </Pressable>
       </View>
 
       {filteredTasks.length === 0 ? (

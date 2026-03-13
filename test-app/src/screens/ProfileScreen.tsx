@@ -1,28 +1,24 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { RootState } from '../store';
-import type { ProfileStackParams, TabParams } from '../navigation/types';
-import { updateName } from '../store/slices/userSlice';
+import type { ProfileStackParams, TabParams, RootStackParams } from '../navigation/types';
 import { useThemeColors } from '../hooks/useThemeColors';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<ProfileStackParams, 'ProfileMain'>,
-  BottomTabScreenProps<TabParams>
+  CompositeScreenProps<
+    BottomTabScreenProps<TabParams>,
+    NativeStackScreenProps<RootStackParams>
+  >
 >;
 
 export default function ProfileScreen({ navigation }: Props) {
   const user = useSelector((state: RootState) => state.user);
-  const dispatch = useDispatch();
   const colors = useThemeColors();
-
-  const handleUpdateName = () => {
-    const newName = user.name === 'Test User' ? 'Updated User' : 'Test User';
-    dispatch(updateName(newName));
-  };
 
   return (
     <View className={`flex-1 ${colors.bg} px-4 pt-4`}>
@@ -31,11 +27,11 @@ export default function ProfileScreen({ navigation }: Props) {
       <Text testID="profile-email" className={`mt-1 ${colors.muted}`}>{user.email}</Text>
 
       <Pressable
-        testID="profile-update-btn"
+        testID="profile-edit-btn"
         className="mt-6 rounded-lg bg-blue-500 px-4 py-3"
-        onPress={handleUpdateName}
+        onPress={() => navigation.navigate('ProfileEditModal')}
       >
-        <Text className="text-center font-semibold text-white">Update Name</Text>
+        <Text className="text-center font-semibold text-white">Edit Profile</Text>
       </Pressable>
 
       <Pressable

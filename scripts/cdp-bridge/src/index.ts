@@ -133,6 +133,20 @@ server.tool(
   createInteractHandler(getClient),
 );
 
+process.on('uncaughtException', (err: Error) => {
+  console.error('MCP server uncaught exception:', err.message);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('MCP server unhandled rejection (non-fatal):', msg);
+});
+
+process.on('SIGTERM', () => {
+  process.exit(0);
+});
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

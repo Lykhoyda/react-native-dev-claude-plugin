@@ -21,6 +21,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 import TasksScreen from '../screens/TasksScreen';
 import ErrorLabModal from '../screens/ErrorLabModal';
+import ProfileEditModal from '../screens/ProfileEditModal';
 import DeepLinkScreen from '../screens/DeepLinkScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParams>();
@@ -147,6 +148,7 @@ export default function RootNavigator() {
   return (
     <RootStack.Navigator>
       <RootStack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
+      <RootStack.Screen name="ProfileEditModal" component={ProfileEditModal} options={{ presentation: 'modal', headerShown: false }} />
       <RootStack.Screen name="ErrorLab" component={ErrorLabModal} options={{ presentation: 'modal', title: 'Error Lab' }} />
       <RootStack.Screen name="DeepLink" component={DeepLinkScreen} options={{ title: 'Deep Link' }} />
     </RootStack.Navigator>

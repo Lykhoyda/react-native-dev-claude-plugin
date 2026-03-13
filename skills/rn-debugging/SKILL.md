@@ -1,6 +1,6 @@
 ---
 name: rn-debugging
-description: This skill should be used when the user asks to "debug the app", "fix a crash", "diagnose a blank screen", "read error logs", "troubleshoot CDP connection", "check Metro status", "find native crashes", "inspect network failures", or needs guidance on CDP vs bash debugging, error type identification, connection troubleshooting, or post-reload readiness for React Native apps.
+description: This skill should be used when the user asks to "debug the app", "fix a crash", "diagnose a blank screen", "read error logs", "troubleshoot CDP connection", "check Metro status", "find native crashes", "inspect network failures", "the app crashed", "I see a blank screen", "the screen is white", "something broke", "app won't load", "RedBox error", "network requests failing", or needs guidance on CDP vs bash debugging, error type identification, connection troubleshooting, or post-reload readiness for React Native apps.
 ---
 
 # rn-debugging — CDP Usage, Error Identification, and Connection Troubleshooting
@@ -30,9 +30,8 @@ native device logs, and bash tools.
 | What are all UI elements' positions? | bash | `adb shell uiautomator dump` (Android only) |
 | Arbitrary runtime value | MCP | `cdp_evaluate(expression="...")` |
 
-**Key rule: If `cdp_error_log` is empty but the app is visibly broken, the
-problem is native.** CDP only sees JavaScript. Native crashes, OOM errors, and
-framework panics are invisible to CDP — always check native logs as fallback.
+**Key rule:** If `cdp_error_log` is empty but the app is visibly broken, the
+problem is native. CDP only sees JavaScript — check native logs as fallback.
 
 ---
 
@@ -49,6 +48,9 @@ framework panics are invisible to CDP — always check native logs as fallback.
 | Native crash (Android) | `adb logcat -b crash` | bash |
 | RN framework error (Android) | `adb logcat -s ReactNative:E ReactNativeJS:E --pid=$(adb shell pidof com.example.app \| awk '{print $1}')` | bash |
 | Network failure | `cdp_network_log` (look for status=0 or missing status) | MCP |
+
+**Note:** Replace `"/YourApp"` with the actual binary name and `com.example.app`
+with the real bundle ID. Find the binary name: `ls $(xcrun simctl get_app_container booted <bundle-id>)`
 
 ---
 
@@ -94,19 +96,18 @@ Decision tree:
 | `APP_HAS_REDBOX` | Error overlay showing | Read `cdp_error_log`, fix code, `cdp_reload` |
 | "No store found" | Zustand not exposed | Add `if (__DEV__) global.__ZUSTAND_STORES__ = { ... }` |
 | All CDP calls fail | Zombie Hermes target | Reload app and reconnect with `cdp_status` |
+| `dev: false` in status | Connected to wrong JS context | CDP auto-selects targets by probing `__DEV__`; if all targets report false, restart Metro or the app |
+| fiberTree/navRef missing | Wrong Bridgeless context | RN 0.76+ Bridgeless exposes multiple Hermes targets; `cdp_status` warns if `dev: false` |
 
-**About code 1006:** Hermes allows only ONE CDP client. Close all debugger UIs
-before the MCP server can connect.
-
-**About code 1001:** Normal close triggered by a reload. The MCP server handles
-this automatically — no action needed.
+**Code 1006:** Hermes allows only one CDP client. Close all debugger UIs first.
+**Code 1001:** Normal close from a reload — handled automatically, no action needed.
 
 ---
 
 ## Post-Reload Readiness
 
-After `cdp_reload`, the server auto-reconnects and waits for React DevTools
-hook (up to 30 seconds). If `cdp_component_tree` returns "No fiber roots"
+After `cdp_reload`, the server auto-reconnects and waits up to 30 seconds for
+React DevTools hook. If `cdp_component_tree` returns "No fiber roots"
 immediately after reload, wait 2 seconds and retry.
 
 Manual readiness check:
@@ -144,66 +145,9 @@ Hermes allows exactly one CDP client at a time. Things that consume a session:
 
 ## Common Error Patterns
 
-### "Cannot read property X of undefined"
-1. `cdp_component_tree` — find which component is rendering
-2. `cdp_store_state` — check if data is in the store
-3. Look for missing null checks or async data race
-
-### "Invariant Violation: Element type is invalid"
-Wrong export or circular import. Check `cdp_console_log(level="error")` for context.
-
-### App Crashes With No CDP Error
-Native crash. Check:
-```bash
-# iOS (use actual binary name — see "Native Log Commands Reference")
-xcrun simctl spawn booted log stream \
-  --predicate 'processImagePath ENDSWITH "/YourApp" AND logType == error'
-
-# Android
-adb logcat -b crash
-```
-
-### "[Circular]" or "[TRUNCATED]" in Results
-Helpers use WeakSet for circular refs and cap output at 50KB.
-Use `path` parameter on `cdp_store_state` to drill into specific keys.
-
-### Network Requests Not Appearing
-1. RN < 0.83 — uses injected hooks. Check `cdp_status` → `capabilities.networkFallback`
-2. Requests made before MCP connected — buffer only captures from connection time
-
----
-
-## Native Log Commands Reference
-
-### iOS
-
-```bash
-# Stream error logs from app (use ENDSWITH for binary name precision)
-xcrun simctl spawn booted log stream \
-  --predicate 'processImagePath ENDSWITH "/YourApp" AND logType == error'
-
-# Get logs from last 2 minutes
-xcrun simctl spawn booted log show \
-  --predicate 'processImagePath ENDSWITH "/YourApp"' --last 2m
-
-# Find the actual binary name for the predicate:
-ls $(xcrun simctl get_app_container booted com.example.app)
-```
-
-### Android
-
-```bash
-# Crash log only
-adb logcat -b crash
-
-# React Native errors (pidof without -s for broader compatibility)
-APP_PID=$(adb shell pidof com.example.app 2>/dev/null | awk '{print $1}') || \
-  APP_PID=$(adb shell ps | grep com.example.app | awk '{print $2}')
-adb logcat -s ReactNative:E ReactNativeJS:E --pid=$APP_PID
-
-# Clear buffer before test
-adb logcat -c
-```
+For diagnostic recipes covering "Cannot read property X of undefined",
+"Invariant Violation", native crashes with no CDP error, truncated results,
+and missing network requests, consult **`references/common-error-patterns.md`**.
 
 ---
 
@@ -212,23 +156,22 @@ adb logcat -c
 ```bash
 curl localhost:8081/status          # Expected: "packager-status:running"
 curl localhost:8081/json/list       # List Hermes debug targets
-curl localhost:19000/status         # Expo alternative port
+curl localhost:19000/status         # Expo alternative port (Expo Dev Client)
 ```
 
 The MCP server auto-discovers Metro on ports 8081, 8082, 19000, 19006.
-Pass `metroPort` to `cdp_status` for non-standard ports.
+Pass `metroPort` to `cdp_status` when using non-standard ports.
 
 ---
 
-## Capability Matrix (by RN Version)
+## Native Log Commands
 
-| Capability | RN < 0.73 | RN 0.73-0.82 | RN 0.83+ |
-|-----------|-----------|--------------|----------|
-| CDP connection | Hermes only | Yes | Yes |
-| Fiber tree walk | Yes (__DEV__) | Yes | Yes |
-| Navigation state | Yes | Yes | Yes |
-| Store state | Yes | Yes | Yes |
-| Network (CDP domain) | No | No | Yes |
-| Network (injected hooks) | Yes (fallback) | Yes (fallback) | Not needed |
-| Console capture | Yes | Yes | Yes |
-| Error tracking | Yes | Yes | Yes |
+For full native log command reference (iOS `log stream`, Android `logcat`,
+binary name discovery), see the **rn-device-control** skill.
+
+---
+
+## Additional Resources
+
+- **`references/common-error-patterns.md`** — Diagnostic recipes for common RN errors
+- **`references/capability-matrix.md`** — CDP feature support by React Native version

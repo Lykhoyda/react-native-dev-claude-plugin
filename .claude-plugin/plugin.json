@@ -40,8 +40,8 @@
   ],
   "mcpServers": {
     "rn-dev-agent-cdp": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/cdp-bridge/dist/index.js"]
+      "command": "bash",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/cdp-bridge/run.sh"]
     }
   }
 }

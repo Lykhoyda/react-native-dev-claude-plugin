@@ -63,6 +63,17 @@ server.tool('cdp_interact', 'Interact with a React Native UI component via the f
     scrollY: z.number().optional().describe('For scroll: vertical offset in pixels (default 300)'),
     animated: z.boolean().default(true).describe('For scroll: whether to animate'),
 }, createInteractHandler(getClient));
+process.on('uncaughtException', (err) => {
+    console.error('MCP server uncaught exception:', err.message);
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    console.error('MCP server unhandled rejection (non-fatal):', msg);
+});
+process.on('SIGTERM', () => {
+    process.exit(0);
+});
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
