@@ -22,6 +22,7 @@ import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 import TasksScreen from '../screens/TasksScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
 import AllTasksScreen from '../screens/AllTasksScreen';
+import DashboardScreen from '../screens/DashboardScreen';
 import ErrorLabModal from '../screens/ErrorLabModal';
 import ProfileEditModal from '../screens/ProfileEditModal';
 import TaskWizardModal from '../screens/TaskWizardModal';
@@ -39,6 +40,7 @@ function HomeStackNavigator() {
     <HomeStack.Navigator>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} options={{ title: 'Home' }} />
       <HomeStack.Screen name="Feed" component={FeedScreen} options={{ title: 'Feed' }} />
+      <HomeStack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
     </HomeStack.Navigator>
   );
 }

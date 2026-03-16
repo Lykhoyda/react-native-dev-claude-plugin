@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type HomeStackParams = {
   HomeMain: undefined;
   Feed: undefined;
+  Dashboard: undefined;
 };
 
 export type ProfileStackParams = {

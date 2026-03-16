@@ -52,6 +52,13 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <Text className="text-center font-semibold text-white">Go to Feed</Text>
       </Pressable>
+      <Pressable
+        testID="go-to-dashboard"
+        className="mt-3 rounded-lg bg-green-500 px-4 py-3"
+        onPress={() => navigation.navigate('Dashboard')}
+      >
+        <Text className="text-center font-semibold text-white">Go to Dashboard</Text>
+      </Pressable>
     </View>
   );
 }

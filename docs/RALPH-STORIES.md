@@ -523,7 +523,7 @@ so important tasks are always visible first.
 
 ---
 
-## S19: SVG Charts Dashboard `[ ]`
+## S19: SVG Charts Dashboard `[DONE]`
 
 **As a user**, I want a dashboard tab showing task statistics as interactive SVG charts — pie chart for priority distribution, bar chart for completion by day.
 
