@@ -1416,11 +1416,53 @@ Split MCP server into a stable supervisor process + restartable CDP worker. When
 
 ---
 
-## Phase 44: Experience Engine (Planned)
+## Phase 44: Documentation Website — GitHub Pages (Planned)
+
+**Status:** Planned
+**Impact:** Public-facing docs for plugin adoption, API reference, and getting started guides
+
+### What to Build
+A static documentation site hosted on GitHub Pages using a modern docs framework (Docusaurus, VitePress, or Starlight).
+
+### Pages
+- **Home** — Hero with plugin overview, "Quick Start" code block, key features
+- **Getting Started** — Installation (marketplace + source), prerequisites, first run
+- **Commands** — `/rn-feature-dev`, `/test-feature`, `/build-and-test`, `/debug-screen`, `/check-env` with examples
+- **Tools Reference** — All 22 MCP tools with params, examples, and output format
+  - CDP tools (12): status, component_tree, navigation_state, store_state, component_state, dispatch, navigate, network_log, console_log, error_log, evaluate, reload, dev_settings, interact
+  - Device tools (8): list, screenshot, snapshot, find, press, fill, swipe, back
+- **Agents** — rn-tester, rn-debugger, rn-code-explorer, rn-code-architect, rn-code-reviewer
+- **Architecture** — Three-layer diagram (device / CDP / bash), WebSocket lifecycle, helper injection
+- **Store Support** — Redux (auto-detect), Zustand (1-line setup), React Query (storeType param)
+- **Benchmarks** — Real timing data from 21 stories, library compatibility matrix
+- **Troubleshooting** — Common errors, recovery procedures, known limitations
+- **Changelog** — Version history with tool additions and breaking changes
+
+### Technical Approach
+- Framework: Docusaurus v3 or Starlight (Astro-based, lighter)
+- Source: `docs-site/` directory in repo root
+- Deploy: GitHub Actions workflow on push to main → builds and deploys to `gh-pages` branch
+- Content: Extract from existing README.md, CLAUDE.md, skill files, and ROADMAP.md
+- API reference: Auto-generate from Zod schemas in `scripts/cdp-bridge/src/index.ts`
+- Search: Algolia DocSearch or built-in search
+
+### Why
+- README.md is at 220+ lines and growing — too long for a single file
+- Tool reference needs structured format with examples (not a flat table)
+- Plugin adoption requires a proper getting-started guide with screenshots
+- Benchmarks and library compatibility matrix are valuable marketing content
+
+---
+
+## Phase 45: Experience Engine (Planned)
 
 **Status:** Designed — spec at `docs/superpowers/specs/2026-03-16-experience-engine-design.md`
 **Impact:** Self-improving plugin that learns from failures — the tool gets better with every use
 **Decisions:** D325-D332
+
+---
+
+*Last updated: 2026-03-16 — 45 phases, 22 tools, 21 stories, 11 libraries*
 
 A local-only self-improvement system that captures failure patterns, classifies them, distills heuristics, and promotes validated learnings into the agent's active context. Inspired by Voyager (skill library), Reflexion (episodic memory), and DSPy (metric-driven optimization).
 
