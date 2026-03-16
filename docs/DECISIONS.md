@@ -1019,3 +1019,17 @@ MSW v2's `msw/native` requires `TransformStream` (Web Streams API) which Hermes 
 
 ### D311: B71 Expo Go guard analysis — session chokepoint is sufficient
 Reviewed B71 mitigation completeness. All device tools that interact with the app (`device_find`, `device_press`, `device_fill`, `device_swipe`, `device_back`) require an active session via `withSession()`. Since `device_snapshot(action=open)` blocks Expo Go bundle IDs (D304), no session can be created, and all session-based tools fail gracefully. `device_screenshot` and `device_list` don't steal focus. Status upgraded from Mitigated to FIXED.
+
+## 2026-03-16: S11 Multi-Step Task Wizard
+
+### D312: Separate addTaskFull reducer instead of modifying addTask signature
+The existing `addTask` reducer accepts `PayloadAction<string>` and is used by the quick-add TextInput on TasksScreen. Rather than changing its signature (breaking the simple use case), added a parallel `addTaskFull` reducer that accepts `{ title, description, priority, tags }`. This avoids touching the 6+ existing references to `addTask`.
+
+### D313: Animated translateX for wizard step transitions instead of ScrollView
+Used `Animated.Value` translateX with `Animated.timing` (250ms) for step transitions instead of horizontal `ScrollView` with snap. Avoids gesture conflicts between swipe-to-change-step and TextInput scrolling. Matches the existing `Animated.Value` pattern used by `SwipeableTaskRow`.
+
+### D314: useWindowDimensions for responsive wizard step widths
+Code review caught that a module-level `Dimensions.get('window').width` would go stale on rotation/resize. Switched to `useWindowDimensions()` hook which re-renders on dimension changes.
+
+### D315: Mounted ref + timer cleanup for wizard create flow
+Code review caught that nested `setTimeout` calls in `handleCreate` could fire after unmount. Added `mountedRef` + `timerRefs` with `useEffect` cleanup to prevent state-after-unmount warnings and stale navigation calls.

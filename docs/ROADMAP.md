@@ -1305,3 +1305,40 @@ Reviewed by code-reviewer agents (3 parallel reviews):
 - All 5 session-requiring tools (`device_find/press/fill/swipe/back`) use `withSession()` — no session = no execution
 - `device_screenshot` and `device_list` don't steal focus (no session needed)
 - Upgraded from Mitigated to FIXED — the guard architecture is complete
+
+---
+
+## Phase 39: S11 Multi-Step Task Creation Wizard (Complete)
+
+**Status:** Complete
+**Date:** 2026-03-16
+
+### What Was Built
+
+3-step task creation wizard as a full-screen modal from TasksScreen. FAB button (animated scale-in) opens the wizard. Step 1: title + description with validation. Step 2: priority pills + tag chips (multi-select). Step 3: review card + create button with loading state. Animated step indicator with spring-scaled dots.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `store/slices/tasksSlice.ts` | Added `description`, `tags` to TaskItem, new `addTaskFull` reducer |
+| `navigation/types.ts` | Added `TaskWizard` route to RootStackParams |
+| `navigation/RootNavigator.tsx` | Registered TaskWizard modal |
+| `screens/TaskWizardModal.tsx` | NEW — 3-step wizard (250 lines) |
+| `components/StepIndicator.tsx` | NEW — animated 3-dot progress indicator |
+| `screens/TasksScreen.tsx` | Added FAB with animated scale-in |
+
+### Benchmark
+
+**Total time: 18 minutes 19 seconds** (discovery through review fixes)
+- Phase 1-3 (discovery, exploration, questions): ~3 min
+- Phase 4 (architecture): ~1 min
+- Phase 5 (implementation): ~5 min
+- Phase 5.5 (live verification): ~5 min
+- Phase 6 (code review + fixes): ~4 min
+
+**Plugin tools used:** cdp_status, cdp_reload, cdp_evaluate, cdp_component_tree, cdp_store_state, cdp_navigation_state, cdp_error_log — all worked first try, zero crashes.
+
+### Review Findings
+- 2 critical fixed (setTimeout memory leak D315, stale SCREEN_WIDTH D314)
+- 2 important deferred (StepIndicator totalSteps stability — dormant, ID generation NaN risk — pre-existing)

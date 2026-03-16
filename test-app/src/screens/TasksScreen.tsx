@@ -1,8 +1,9 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TextInput, Pressable, FlatList, Animated } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { TasksStackParams } from '../navigation/types';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { TasksStackParams, RootStackParams } from '../navigation/types';
 import {
   addTask,
   setFilter,
@@ -32,7 +33,17 @@ type Props = NativeStackScreenProps<TasksStackParams, 'TasksMain'>;
 
 export default function TasksScreen({ navigation }: Props) {
   const dispatch = useDispatch();
+  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const [text, setText] = useState('');
+  const fabScale = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(fabScale, {
+      toValue: 1,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  }, [fabScale]);
   const filteredTasks = useSelector(selectSortedFilteredTasks);
   const currentFilter = useSelector(selectCurrentFilter);
   const currentSort = useSelector(selectCurrentSort);
@@ -162,6 +173,20 @@ export default function TasksScreen({ navigation }: Props) {
       </View>
 
       <UndoSnackbar />
+
+      {/* FAB */}
+      <Animated.View
+        style={{ transform: [{ scale: fabScale }], position: 'absolute', bottom: 90, right: 20, elevation: 8 }}
+      >
+        <Pressable
+          testID="fab-create-task"
+          onPress={() => rootNav.navigate('TaskWizard')}
+          className="h-14 w-14 items-center justify-center rounded-full bg-blue-500"
+          style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 }}
+        >
+          <Text className="text-2xl font-bold text-white">+</Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }

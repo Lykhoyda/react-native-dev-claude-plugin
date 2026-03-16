@@ -349,3 +349,41 @@ so important tasks are always visible first.
 - `tabBarBadge` only accepts `number | string` — `Animated.Value` scale animations cannot be attached to it. Removed dead code after Codex+Gemini caught it
 - `SyncContext` needed to share `syncNow()` from global hook to SettingsScreen — React Context is the right-sized abstraction
 - `useBackgroundSync` must guard `setIsSyncing` with a `mountedRef` to prevent updates after unmount
+
+---
+
+## S11: Multi-Step Task Creation Wizard `[DONE]`
+
+**As a user**, I want a guided multi-step wizard to create tasks with richer detail, featuring animated transitions between steps, per-step validation, and a review screen before final submission.
+
+**Requirements:**
+- Floating Action Button (FAB) on TasksScreen — blue circle with "+" icon, bottom-right, with scale-in animation on mount
+- FAB opens a full-screen modal with 3-step wizard:
+  - **Step 1 — Title & Description:** TextInput for title (required, min 3 chars), optional multiline description, character counter. Inline validation errors.
+  - **Step 2 — Priority & Tags:** Priority selector (low/medium/high) as tappable pill chips with active state animation. Tag chips: "Bug", "Feature", "Chore" (multi-select, toggle with color fill animation).
+  - **Step 3 — Review & Confirm:** Summary card showing all entered data. "Create Task" button with loading state animation (spinner → checkmark morph).
+- Animated horizontal step indicator (3 dots with connecting line, active dot scales up + fills blue, completed dots show checkmark)
+- Swipeable steps via horizontal `ScrollView` with snap (or animated translateX) — also Next/Back buttons
+- Keyboard avoidance: inputs stay visible when keyboard opens
+- Back button on Step 1 = cancel wizard (confirm if form has data)
+- "Create Task" dispatches `addTask` with title, description, priority, tags
+- Add `description: string`, `tags: string[]` fields to `TaskItem` in tasksSlice
+- Modal dismisses with slide-down animation after creation, shows brief success toast
+- testIDs: `fab-create-task`, `wizard-modal`, `wizard-step-indicator`, `wizard-step-1`, `wizard-step-2`, `wizard-step-3`, `wizard-title-input`, `wizard-desc-input`, `wizard-title-error`, `wizard-char-count`, `wizard-priority-low`, `wizard-priority-medium`, `wizard-priority-high`, `wizard-tag-bug`, `wizard-tag-feature`, `wizard-tag-chore`, `wizard-next-btn`, `wizard-back-btn`, `wizard-create-btn`, `wizard-success-toast`
+
+**CDP tools exercised:** `cdp_component_tree` (wizard steps, validation errors, step indicator state), `cdp_store_state` (new task with description+tags), `cdp_dispatch` (addTask with full payload), `cdp_navigation_state` (modal presentation), `cdp_evaluate` (animation state inspection, keyboard simulation), `cdp_console_log` (wizard lifecycle logs)
+
+**Acceptance criteria for verification:**
+- FAB visible on TasksScreen, tapping opens wizard modal
+- Step indicator shows step 1 active (dot scaled, blue)
+- Enter empty title → tap Next → inline error "Title must be at least 3 characters"
+- Enter valid title + description → character counter updates → Next → step 2
+- Select "high" priority → pill animates to active state
+- Toggle "Bug" and "Feature" tags → both show selected state
+- Swipe or tap Next → step 3 shows review card with all data
+- Tap "Create Task" → loading animation → success → modal dismisses
+- Store shows new task with title, description, priority: "high", tags: ["Bug", "Feature"]
+- Task count incremented, new task visible in list
+- Navigate back → FAB still visible
+
+**Plugin tools focus:** Most complex single-screen UI story. Tests modal navigation, multi-step form state, animation verification, keyboard handling, and combined store dispatch with rich payload. First story to verify animated transitions via CDP.

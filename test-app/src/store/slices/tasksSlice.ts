@@ -8,9 +8,11 @@ export type TaskSort = 'default' | 'priority';
 export interface TaskItem {
   id: string;
   title: string;
+  description: string;
   done: boolean;
   synced: boolean;
   priority: TaskPriority;
+  tags: string[];
 }
 
 export interface PendingDelete {
@@ -28,9 +30,9 @@ interface TasksState {
 
 const initialState: TasksState = {
   items: [
-    { id: '1', title: 'Review pull request', done: false, synced: true, priority: 'high' },
-    { id: '2', title: 'Update documentation', done: false, synced: true, priority: 'low' },
-    { id: '3', title: 'Fix navigation bug', done: true, synced: true, priority: 'medium' },
+    { id: '1', title: 'Review pull request', description: '', done: false, synced: true, priority: 'high', tags: [] },
+    { id: '2', title: 'Update documentation', description: '', done: false, synced: true, priority: 'low', tags: [] },
+    { id: '3', title: 'Fix navigation bug', description: '', done: true, synced: true, priority: 'medium', tags: [] },
   ],
   filter: 'all',
   sort: 'default',
@@ -49,9 +51,26 @@ const tasksSlice = createSlice({
       state.items.unshift({
         id: String(maxId + 1),
         title: action.payload,
+        description: '',
         done: false,
         synced: false,
         priority: 'medium',
+        tags: [],
+      });
+    },
+    addTaskFull: (state, action: PayloadAction<{ title: string; description: string; priority: TaskPriority; tags: string[] }>) => {
+      let maxId = state.items.reduce((m, t) => Math.max(m, Number(t.id)), 0);
+      if (state.pendingDelete) {
+        maxId = Math.max(maxId, Number(state.pendingDelete.task.id));
+      }
+      state.items.unshift({
+        id: String(maxId + 1),
+        title: action.payload.title,
+        description: action.payload.description,
+        done: false,
+        synced: false,
+        priority: action.payload.priority,
+        tags: action.payload.tags,
       });
     },
     toggleTask: (state, action: PayloadAction<string>) => {
@@ -100,7 +119,7 @@ const tasksSlice = createSlice({
   },
 });
 
-export const { addTask, toggleTask, removeTask, setFilter, markAllSynced, cyclePriority, toggleSort, softDelete, restoreTask, commitDelete } = tasksSlice.actions;
+export const { addTask, addTaskFull, toggleTask, removeTask, setFilter, markAllSynced, cyclePriority, toggleSort, softDelete, restoreTask, commitDelete } = tasksSlice.actions;
 
 export const selectActiveTaskCount = createSelector(
   (state: { tasks: TasksState }) => state.tasks.items,
