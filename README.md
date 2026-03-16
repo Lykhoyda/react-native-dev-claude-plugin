@@ -40,6 +40,7 @@ This is the primary command. It runs an 8-phase development workflow that goes f
 | 5.5. Verification | Prove it works live: CDP health check, component tree, store state, interaction test, screenshot |
 | 6. Review | Launch parallel review agents for correctness, RN conventions, and project patterns |
 | 7. Summary | Document what was built, decisions made, files changed, and verification results |
+| 8. E2E Proof | Execute the architect's proof flow step by step, capture numbered screenshots, write PROOF.md |
 
 Each phase gates on the previous one. Claude asks for your approval before implementing and before applying review fixes.
 
@@ -92,6 +93,17 @@ Phase 6: Review agents found 2 issues (both fixed)...
 Phase 7: Done. 4 files modified, 3 decisions logged.
 ```
 
+### Benchmarks
+
+Real measurements from the test app (11 stories completed):
+
+| Feature complexity | Time | Crashes | Manual interventions |
+|-------------------|------|---------|---------------------|
+| Simple (search, toggle) | ~10 min | 0 | 0 |
+| Medium (swipe-to-delete, sync) | ~15 min | 0 | 0 |
+| Complex (3-step wizard with animations) | ~25 min | 0 | 0 |
+| 4-feature batch verification | ~2 min | 0 | 0 |
+
 ## Other Commands
 
 These are useful on their own or alongside `rn-feature-dev`:
@@ -107,12 +119,12 @@ These are useful on their own or alongside `rn-feature-dev`:
 
 | Requirement | Notes |
 |-------------|-------|
-| Node.js >= 18 | For the CDP bridge MCP server |
+| Node.js >= 22 (LTS) | For the CDP bridge MCP server |
 | Claude Code CLI | `npm install -g @anthropic-ai/claude-code` |
 | iOS Simulator or Android Emulator | At least one platform |
 | Metro dev server running | `npx expo start` or `npx react-native start` |
 
-**maestro-runner** is auto-installed on first plugin load. It enables real UI interactions (tap, type, swipe) beyond what CDP can do alone.
+**maestro-runner** and **agent-device** are auto-installed on first plugin load. maestro-runner enables E2E test flows; agent-device provides native device interactions (tap, swipe, type, find elements).
 
 ## Setup for Your App
 
@@ -161,7 +173,7 @@ Add `testID` to interactive elements for reliable component queries:
 │  ┌──────▼───▼────────────▼─────────────────▼──────┐ │
 │  │              MCP Server (CDP Bridge)            │ │
 │  │  WebSocket → Metro → Hermes CDP                 │ │
-│  │  10 tools: status, tree, nav, store, network... │ │
+│  │  20 tools: 11 CDP + 8 device + 1 dispatch       │ │
 │  └─────────────────────┬───────────────────────────┘ │
 │                        │                             │
 │  ┌─────────────────────▼───────────────────────────┐ │
@@ -176,22 +188,36 @@ Add `testID` to interactive elements for reliable component queries:
     └─────────┘                   └───────────┘
 ```
 
-### CDP Bridge MCP Tools
+### MCP Tools (20 total)
 
-10 tools available to agents and directly in Claude Code:
+**CDP tools** (React internals via Chrome DevTools Protocol):
 
 | Tool | Purpose |
 |------|---------|
-| `cdp_status` | Health check + auto-connect |
-| `cdp_component_tree` | React fiber tree (filtered by component name or testID) |
+| `cdp_status` | Health check + auto-connect + auto-recovery |
+| `cdp_component_tree` | React fiber tree (filtered, cycle-safe) |
 | `cdp_navigation_state` | Current route, stack, tabs |
 | `cdp_store_state` | Redux/Zustand state at a dot-path |
+| `cdp_dispatch` | Atomic Redux dispatch + state read in single execution |
 | `cdp_network_log` | Recent HTTP requests |
 | `cdp_console_log` | Console output buffer |
 | `cdp_error_log` | JS errors + promise rejections |
 | `cdp_evaluate` | Execute JS in Hermes |
 | `cdp_reload` | Full reload with auto-reconnect |
 | `cdp_dev_settings` | Dev menu actions |
+
+**Device tools** (native interaction via agent-device CLI):
+
+| Tool | Purpose |
+|------|---------|
+| `device_list` | List simulators/emulators |
+| `device_screenshot` | Capture screen image |
+| `device_snapshot` | Accessibility tree with @refs |
+| `device_find` | Find element by text, optionally tap |
+| `device_press` | Tap element by @ref |
+| `device_fill` | Type text into input by @ref |
+| `device_swipe` | Directional swipe gesture |
+| `device_back` | System back navigation |
 
 ## Troubleshooting
 
