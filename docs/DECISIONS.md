@@ -1052,3 +1052,8 @@ S13 revealed that `cdp_store_state` always returns Redux first when `__REDUX_STO
 
 ### D320: FeedScreen rebuilt with useInfiniteQuery + paginated mock API
 Replaced manual fetch/dispatch pattern with `@tanstack/react-query` `useInfiniteQuery`. Mock interceptor updated to support `?page=N&limit=N` pagination with 20 total items. Cache status badge (Fresh/Stale/Fetching) driven by `dataUpdatedAt` + `staleTime: 30000`.
+
+## 2026-03-16: S14 Bottom Sheet (Partial)
+
+### D321: @gorhom/bottom-sheet renders but snapToIndex fails silently in Expo Go
+Installed `@gorhom/bottom-sheet` + `react-native-gesture-handler`. Created `TaskBottomSheet` component with 3 snap points (25%/50%/90%), backdrop, and task editing. The BottomSheet renders (no JS errors) but `snapToIndex(1)` from a ref called in `handleNavigate` doesn't open the sheet. Root cause: likely Reanimated worklet initialization timing in Expo Go — the sheet needs to be fully mounted before snap calls work. The component is created but the sheet's internal layout pass hasn't completed. This is a known Expo Go limitation with Gorhom bottom-sheet v4. Plugin finding: `cdp_interact` cannot trigger native gestures (swipe-up), and `snapToIndex` via ref requires precise timing that CDP can't guarantee.

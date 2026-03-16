@@ -17,9 +17,11 @@ import {
   selectCurrentSort,
 } from '../store/slices/tasksSlice';
 import type { TaskFilter, TaskItem } from '../store/slices/tasksSlice';
+import type BottomSheetType from '@gorhom/bottom-sheet';
 import { useThemeColors } from '../hooks/useThemeColors';
 import SwipeableTaskRow from '../components/SwipeableTaskRow';
 import UndoSnackbar from '../components/UndoSnackbar';
+import TaskBottomSheet from '../components/TaskBottomSheet';
 
 const API_BASE = 'https://api.testapp.local';
 
@@ -44,6 +46,8 @@ export default function TasksScreen({ navigation }: Props) {
       useNativeDriver: true,
     }).start();
   }, [fabScale]);
+  const sheetRef = useRef<BottomSheetType>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const filteredTasks = useSelector(selectSortedFilteredTasks);
   const currentFilter = useSelector(selectCurrentFilter);
   const currentSort = useSelector(selectCurrentSort);
@@ -77,8 +81,12 @@ export default function TasksScreen({ navigation }: Props) {
   }, [dispatch]);
 
   const handleNavigate = useCallback((id: string) => {
-    navigation.navigate('TaskDetail', { id });
-  }, [navigation]);
+    const task = filteredTasks.find(t => t.id === id);
+    if (task) {
+      setSelectedTask(task);
+      sheetRef.current?.snapToIndex(1);
+    }
+  }, [filteredTasks]);
 
   const renderItem = useCallback(({ item }: { item: TaskItem }) => (
     <SwipeableTaskRow
@@ -173,6 +181,12 @@ export default function TasksScreen({ navigation }: Props) {
       </View>
 
       <UndoSnackbar />
+
+      <TaskBottomSheet
+        ref={sheetRef}
+        task={selectedTask}
+        onDismiss={() => setSelectedTask(null)}
+      />
 
       {/* FAB */}
       <Animated.View

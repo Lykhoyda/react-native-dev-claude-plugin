@@ -434,7 +434,7 @@ so important tasks are always visible first.
 
 ---
 
-## S14: Bottom Sheet with Snap Points `[ ]`
+## S14: Bottom Sheet with Snap Points `[PARTIAL]`
 
 **As a user**, I want a task detail bottom sheet (Gorhom) that slides up from the task list with snap points, backdrop, and gesture dismiss.
 

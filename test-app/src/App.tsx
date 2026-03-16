@@ -1,5 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -33,19 +34,21 @@ function SyncBridge({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Provider store={store}>
-        <PersistGate loading={null} persistor={persistor}>
-          <SyncBridge>
-            <NavigationContainer ref={navigationRef} linking={linking}>
-              <View style={{ flex: 1 }}>
-                <OfflineBanner />
-                <RootNavigator />
-              </View>
-            </NavigationContainer>
-          </SyncBridge>
-        </PersistGate>
-      </Provider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <Provider store={store}>
+          <PersistGate loading={null} persistor={persistor}>
+            <SyncBridge>
+              <NavigationContainer ref={navigationRef} linking={linking}>
+                <View style={{ flex: 1 }}>
+                  <OfflineBanner />
+                  <RootNavigator />
+                </View>
+              </NavigationContainer>
+            </SyncBridge>
+          </PersistGate>
+        </Provider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
