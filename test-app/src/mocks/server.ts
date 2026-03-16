@@ -1,4 +1,3 @@
-import { setupServer } from 'msw/native';
-import { handlers } from './handlers';
-
-export const server = setupServer(...handlers);
+// MSW server removed — Hermes lacks TransformStream (B66)
+// Mock fetch interceptor is in interceptor.ts, activated in App.tsx
+export {};

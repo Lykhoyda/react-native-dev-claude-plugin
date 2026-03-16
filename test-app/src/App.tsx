@@ -9,6 +9,11 @@ import OfflineBanner from './components/OfflineBanner';
 import SyncContext from './context/SyncContext';
 import { useBackgroundSync } from './hooks/useBackgroundSync';
 import type { RootStackParams } from './navigation/types';
+import { enableMockFetch } from './mocks/interceptor';
+
+if (__DEV__) {
+  enableMockFetch();
+}
 
 const navigationRef = createNavigationContainerRef<RootStackParams>();
 

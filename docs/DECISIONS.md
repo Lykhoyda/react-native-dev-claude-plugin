@@ -1008,3 +1008,14 @@ Codex and Gemini both identified that `safeStringify`'s internal 50KB truncation
 
 ### D308: dev:false recovery falls through to isPaused check instead of returning early
 Gemini identified that the `dev === false` auto-recovery path returned `okResult` immediately on success, skipping the subsequent `isPaused` check. If the recovered JS context was also paused, the caller would get `isPaused: true` inside a success response without guidance. Refactored to set `devRecovered` flag and `autoRecoveredMessage`, fall through to the `isPaused` check, then attach the recovery metadata to the final `okResult`.
+
+## 2026-03-16: Phase 38 + B66/B71 Fixes
+
+### D309: Node.js LTS-only engine requirement (>=22)
+Updated `engines.node` from `>=18` to `>=22` in `scripts/cdp-bridge/package.json`. Added Node version detection to `hooks/detect-rn-project.sh` — warns on non-LTS (odd major) and sub-22 versions. Aligns with React Native and Expo's own LTS recommendations.
+
+### D310: Replace MSW v2 with fetch interceptor for Hermes compatibility (fixes B66)
+MSW v2's `msw/native` requires `TransformStream` (Web Streams API) which Hermes doesn't provide. `server.listen()` was never called, making all mock handlers dead code. Replaced with a lightweight fetch interceptor (`test-app/src/mocks/interceptor.ts`) that monkey-patches `globalThis.fetch` in `__DEV__` mode. Routes are plain regex + handler pairs — no runtime dependencies. Removed `msw` from `package.json`.
+
+### D311: B71 Expo Go guard analysis — session chokepoint is sufficient
+Reviewed B71 mitigation completeness. All device tools that interact with the app (`device_find`, `device_press`, `device_fill`, `device_swipe`, `device_back`) require an active session via `withSession()`. Since `device_snapshot(action=open)` blocks Expo Go bundle IDs (D304), no session can be created, and all session-based tools fail gracefully. `device_screenshot` and `device_list` don't steal focus. Status upgraded from Mitigated to FIXED.

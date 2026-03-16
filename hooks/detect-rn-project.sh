@@ -23,6 +23,14 @@ if [ "$has_rn_config" = true ]; then
   # Resolve plugin root (hooks/ is one level down from plugin root)
   PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+  # Warn if Node.js is not an LTS version (even numbers: 22, 24, ...)
+  NODE_MAJOR=$(node -e 'console.log(process.versions.node.split(".")[0])' 2>/dev/null)
+  if [ -n "$NODE_MAJOR" ] && [ "$((NODE_MAJOR % 2))" -ne 0 ]; then
+    echo "Warning: Node.js v${NODE_MAJOR} is not an LTS release. rn-dev-agent requires Node >= 22 LTS."
+  elif [ -n "$NODE_MAJOR" ] && [ "$NODE_MAJOR" -lt 22 ]; then
+    echo "Warning: Node.js v${NODE_MAJOR} is below the minimum (22 LTS). Some CDP bridge features may not work."
+  fi
+
   # Ensure maestro-runner is installed (silent if already present)
   bash "$PLUGIN_ROOT/scripts/ensure-maestro-runner.sh" 2>/dev/null || true
 

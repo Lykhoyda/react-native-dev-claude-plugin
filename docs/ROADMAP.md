@@ -1283,20 +1283,25 @@ Reviewed by code-reviewer agents (3 parallel reviews):
 
 ---
 
-## Phase 38: Node.js LTS-Only Support (Planned)
+## Phase 38: Node.js LTS-Only + B66/B71 Fixes (Complete)
 
-**Status:** Planned
-**Date:** 2026-03-13
+**Status:** Complete
+**Date:** 2026-03-16
 
-Drop support for non-LTS Node.js versions. The CDP bridge MCP server should target only active LTS releases (currently Node 22 LTS, next Node 24 LTS in October 2026). This simplifies CI matrix, avoids chasing odd-numbered release quirks, and aligns with React Native's own support policy.
+### Node.js LTS-Only (D309)
+- Updated `engines.node` from `>=18` to `>=22` in `scripts/cdp-bridge/package.json`
+- Added Node version detection to `hooks/detect-rn-project.sh` — warns on non-LTS and sub-22 versions
 
-### Changes Needed
-- Update `engines` field in `scripts/cdp-bridge/package.json` to `"node": ">=22"`
-- Update README requirements table to specify LTS versions only
-- Add Node version check to `hooks/detect-rn-project.sh` (warn if non-LTS detected)
-- Update CI workflows (if added) to test only against LTS versions
+### B66: MSW → Fetch Interceptor (D310)
+- MSW v2's `msw/native` requires `TransformStream` which Hermes doesn't have — `server.listen()` was never called
+- Created `test-app/src/mocks/interceptor.ts` — lightweight fetch monkey-patch with regex route matching
+- Activated in `App.tsx` via `enableMockFetch()` under `__DEV__` guard
+- Removed `msw` from package.json dependencies
+- All API calls to `api.testapp.local` now return mock data instead of hanging
 
-### Why
-- Non-LTS Node versions (19, 21, 23) have 6-month lifespans and receive no security patches after EOL
-- React Native and Expo both recommend LTS versions
-- Reduces surface area for "works on my machine" issues caused by V8/libuv differences in odd releases
+### B71: Expo Go Guard — FIXED (D311)
+- Analyzed session-based tool flow: `device_snapshot(action=open)` is the only entry point for session creation
+- D304 already blocks Expo Go bundle IDs at this chokepoint
+- All 5 session-requiring tools (`device_find/press/fill/swipe/back`) use `withSession()` — no session = no execution
+- `device_screenshot` and `device_list` don't steal focus (no session needed)
+- Upgraded from Mitigated to FIXED — the guard architecture is complete

@@ -235,9 +235,9 @@
 
 ### B66: MSW v2 msw/native incompatible with Hermes (HIGH)
 **Context:** Test app has MSW v2 set up with `setupServer` from `msw/native` and mock handlers for all API endpoints. However, `server.listen()` was never called because MSW v2's native module requires `TransformStream` (Web Streams API) which Hermes doesn't provide. Attempting to import `msw/native` at runtime throws "Property 'TransformStream' doesn't exist". This means all `fetch()` calls to `api.testapp.local` go to the real (non-existent) domain and hang until timeout.
-**Workaround:** Added 5s AbortController timeout to FeedScreen fetch. Other screens may still hang. Long-term fix: either polyfill TransformStream for Hermes, downgrade to MSW v1, or replace MSW with a simple fetch interceptor.
+**Fixed by:** D310 — Replaced MSW with a lightweight fetch interceptor (`mocks/interceptor.ts`) that monkey-patches `globalThis.fetch` in `__DEV__` mode. Removed `msw` dependency from package.json.
 **Found by:** Debugging infinite loading on Feed screen during S6.
-**Status:** Open — MSW mocks are non-functional in the test app
+**Status:** FIXED
 
 ### B67: PanResponder stale closure captures initial props in SwipeableTaskRow (LOW)
 **Context:** `PanResponder.create()` is called once in `useRef`, so `onPanResponderRelease` captures the initial `onDelete` and `item` props. If parent passes new refs (e.g. after sort change while mid-swipe), the callback uses stale values.
@@ -266,10 +266,9 @@
 
 ### B71: agent-device device_find/device_snapshot brings Agent Device Runner to foreground (HIGH)
 **Context:** Using `device_find`, `device_snapshot(action=open)`, or `device_screenshot` via the agent-device CLI causes the Agent Device Runner app to come to the foreground on iOS Simulator, stealing focus from Expo Go. After this, Expo Go shows a blank white screen and requires `xcrun simctl terminate` + `xcrun simctl openurl` to recover.
-**Workaround:** Use `cdp_interact` for button presses and `xcrun simctl io booted screenshot` for screenshots. Avoid all `device_*` tools when testing Expo Go apps on iOS Simulator.
-**Mitigated by:** D304 — `device_snapshot(action=open)` now rejects Expo Go bundle IDs before spawning CLI.
+**Fixed by:** D304 + D311 — `device_snapshot(action=open)` rejects Expo Go bundle IDs. All session-based tools (`device_find/press/fill/swipe/back`) require a session via `withSession()`, so they can't run without a valid session. `device_screenshot` and `device_list` don't steal focus. The session creation chokepoint blocks the entire attack surface.
 **Found by:** Live verification during S7-S10.
-**Status:** Mitigated — Expo Go blocked at tool level; other `device_*` tools still risk focus stealing
+**Status:** FIXED
 
 ### B72: safeStringify WeakSet marks shared (non-circular) object references as [Circular] (LOW)
 **Context:** `safeStringify` uses a `WeakSet` to track visited objects but never removes them when moving up the tree (JSON.stringify replacer has no "exit" hook). If the same object is referenced from multiple locations without being circular (e.g., shared empty arrays, reused style objects in Redux state), the second occurrence is labeled `[Circular]`.
