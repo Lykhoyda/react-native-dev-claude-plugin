@@ -22,7 +22,8 @@
   "skills": [
     "./skills/rn-device-control",
     "./skills/rn-testing",
-    "./skills/rn-debugging"
+    "./skills/rn-debugging",
+    "./skills/rn-best-practices"
   ],
   "agents": [
     "./agents/rn-tester.md",

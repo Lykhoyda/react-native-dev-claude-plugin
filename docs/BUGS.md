@@ -281,3 +281,12 @@
 **Workaround:** Avoid killing Metro mid-session. Use `cdp_reload(full=true)` for app reloads. If Metro must restart (e.g., new native module installation), restart the entire Claude Code session afterward.
 **Found by:** S16 FlashList integration — `@shopify/flash-list` required Metro cache clear to resolve.
 **Status:** Open — critical operational limitation
+
+### B75: Nested tab navigation from dismissed RootStack screens fails
+**Status:** Open
+**Severity:** Medium
+**Context:** S23 Global Search — tapping a search result should dismiss the modal and navigate to the detail screen in a nested tab stack.
+**Root cause:** React Navigation native-stack does not support navigating to nested tab screens from a screen being removed from the stack. The component unmounts before navigation can complete. `navigate('Tabs', { screen: 'TasksTab', params: { screen: 'TaskDetail', ... } })` pops to Tabs but doesn't forward nested params to already-mounted tab navigators.
+**Approaches tested:** goBack+setTimeout, goBack+__NAV_REF__, beforeRemove listener, InteractionManager, CommonActions.reset, various presentation modes (modal, fullScreenModal, containedTransparentModal, slide_from_bottom).
+**Workaround:** Current implementation dismisses the modal on tap. Deep navigation deferred.
+**Potential fix:** Use React Navigation's `linking` system to navigate via deep link after dismiss, or use a global event bus (EventEmitter) subscribed in App.tsx that fires navigate on the container ref after the modal is fully removed from the stack.

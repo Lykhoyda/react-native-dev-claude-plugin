@@ -1105,3 +1105,33 @@ Ralph Loop S12-S21 proved that `cdp_interact` (calls JS handlers directly via te
 
 ### D335: Helpers version 9 — navigateTo + updated interact description
 Bumped to v9 for `navigateTo` function and public API addition.
+
+
+## 2026-03-17: Vercel RN Best Practices Integration (Phase 45)
+
+### D336: All 36 rules inline in SKILL.md over reference files
+With 1M token context windows, token efficiency is no longer a constraint. Embedding all 36 rules inline in a single SKILL.md (~900 lines) is simpler than splitting into 4 reference files that require selective loading. Every agent invocation gets the complete rule set with zero I/O overhead. Updating rules means editing one file. The alternative (table + reference files) was designed for smaller context windows.
+
+### D337: Pass 4 as dedicated review pass over augmenting Pass 2
+Added a new Pass 4 ("Vercel RN Best Practices") to the reviewer instead of merging rules into the existing Pass 2 (RN Conventions). Pass 2 covers rn-dev-agent-specific conventions (testIDs, __DEV__ guards, Zustand exposure) that are plugin-specific. Pass 4 covers universal RN best practices from Vercel. Keeping them separate prevents duplication, makes each pass independently toggleable, and preserves clear ownership (Pass 2 = plugin needs, Pass 4 = community best practices).
+
+### D338: Rule citation format [RN-X.X] for traceable findings
+Every Pass 4 finding must cite its rule ID: `[RN-2.1] Avoid Inline Objects in renderItem — HIGH`. This links findings back to the rule corpus unambiguously, enables developers to look up the full rule with code examples, and enables future automation (e.g., counting which rules fire most often for the Experience Engine).
+
+### D339: Skill wiring via frontmatter over inline instructions
+Added `rn-best-practices` to the `skills:` frontmatter field of both reviewer and architect agents rather than embedding instructions in the agent body. This is the established pattern (both already use `skills: rn-testing`). The skill content is injected at agent launch time, keeping agent files lean and making the rule set available to any future agent that adds the skill reference.
+
+### D340: Restructure rn-best-practices to match Vercel's three-tier design
+Initial implementation put all 36 rules inline in SKILL.md (25.6KB). Restructured to match Vercel's intended architecture: compact SKILL.md (~4KB index + CRITICAL rules inline) + 36 individual rule files in references/ (156KB total with full incorrect/correct code examples). The condensed inline approach lost the detailed code examples that make rules actionable during review. With individual files, agents can read the full rule with all edge cases when needed, and upstream updates from Vercel are a simple file-by-file replacement. This follows the existing skill pattern in the plugin (rn-debugging uses references/ for overflow content).
+
+### D341: SectionHeader consumes useThemeColors internally (Gemini review)
+Moved `useThemeColors()` call from renderItem prop flow into the SectionHeader component itself. This eliminates the `colors` object from renderItem's dependency array, making the FlashList renderItem callback stable across theme reads. Same pattern already applied to SearchResultItem.
+
+### D342: SKILL.md index aligned with reference file frontmatter as source of truth (Codex review)
+The SKILL.md rule index had impact levels that differed from the reference file frontmatter (e.g., callbacks listed as HIGH in index but MEDIUM in frontmatter, monorepo-native-deps listed as LOW in index but CRITICAL in frontmatter). Aligned all 36 index rows to match the reference frontmatter. Reference files are now the single source of truth for impact levels.
+
+### D343: Keyword triggers added to Pass 4 reviewer prompt (Gemini review)
+Added deterministic keyword-to-rule mapping in the Pass 4 prompt. When the reviewer detects specific code patterns (FlatList, Animated, useState, etc.), it MUST read the corresponding reference files before writing findings. This replaces the previous "read if category present" which relied on LLM judgment. Reduces the chance of the reviewer skipping applicable rules.
+
+### D344: HighlightedText wraps all array items in Text elements (Gemini review)
+Raw strings in a React Native array cause "missing key" warnings and inconsistent rendering. Wrapped non-matching text parts in `<Text key={i}>` elements, same as the matching parts. All items in the parts array now have explicit keys.

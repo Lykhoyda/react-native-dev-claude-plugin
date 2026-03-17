@@ -26,7 +26,7 @@ description: |
   </example>
 tools: Glob, Grep, LS, Read
 model: sonnet
-skills: rn-testing
+skills: rn-testing, rn-best-practices
 color: magenta
 ---
 
@@ -89,6 +89,35 @@ Rate each potential issue 0–100:
 - Import style matches (relative vs alias)
 - CLAUDE.md rules are respected
 - No duplicate code that could use an existing utility
+
+### Pass 4: Vercel RN Best Practices
+
+Apply the 36 rules from the `rn-best-practices` skill. Consult the rule index
+table in the skill, then **you MUST read** the full `references/<rule>.md` file
+for any rule whose category is detected in the code under review.
+
+**Keyword triggers — if you see these patterns, MUST read the corresponding rules:**
+- `FlatList`, `FlashList`, `LegendList`, `SectionList`, `renderItem` → read ALL `references/list-performance-*.md`
+- `Animated`, `Reanimated`, `useSharedValue`, `useAnimatedStyle`, `withTiming` → read `references/animation-*.md`
+- `onScroll`, `scrollEventThrottle`, `useAnimatedScrollHandler` → read `references/scroll-position-no-state.md`
+- `createStackNavigator`, `createBottomTabNavigator` → read `references/navigation-native-navigators.md`
+- `useState`, `useReducer`, `useEffect` with setState → read `references/react-state-*.md`
+- `Image`, `TouchableOpacity`, `Modal`, `SafeAreaView`, `measure()` → read relevant `references/ui-*.md`
+
+**Scanning order:**
+1. **CRITICAL** (always check — inline in skill): `[RN-1.1]` falsy `&&`, `[RN-1.2]` bare strings
+2. **HIGH** (read reference files when keyword triggers match):
+   `[RN-2.x]` list performance, `[RN-3.1]` animation GPU, `[RN-4.1]` scroll, `[RN-5.1]` navigation
+3. **MEDIUM** (read reference files when keyword triggers match):
+   `[RN-6.x–10.x]` state, compiler, UI, design system
+4. **LOW** (report only if 3+ occurrences AND confidence >= 80):
+   `[RN-11.x–14.x]` monorepo, deps, JS, fonts
+
+**Citation format**: `[RN-2.1] Avoid Inline Objects in renderItem — HIGH (confidence 90)`
+
+Do NOT duplicate findings already reported in Pass 2. Pass 2 covers
+rn-dev-agent-specific conventions (testIDs, `__DEV__` guards, Zustand exposure).
+Pass 4 covers the Vercel best-practice rule set.
 
 ## Output Format
 

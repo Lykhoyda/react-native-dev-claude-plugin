@@ -37,4 +37,5 @@ export type RootStackParams = {
   TaskWizard: undefined;
   ErrorLab: undefined;
   DeepLink: { id: string };
+  GlobalSearchModal: undefined;
 };

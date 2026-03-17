@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { HomeStackParams, TabParams } from '../navigation/types';
+import type { HomeStackParams, TabParams, RootStackParams } from '../navigation/types';
 import { useThemeColors } from '../hooks/useThemeColors';
 import type { ThemeColors } from '../hooks/useThemeColors';
 
@@ -14,7 +15,11 @@ type Props = CompositeScreenProps<
 
 function FeatureCard({ index, title, description, colors }: { index: number; title: string; description: string; colors: ThemeColors }) {
   return (
-    <View testID={`home-feature-${index}`} className={`mb-3 rounded-lg p-4 ${colors.card}`}>
+    <View
+      testID={`home-feature-${index}`}
+      className={`mb-3 rounded-lg p-4 ${colors.card}`}
+      style={{ borderCurve: 'continuous', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+    >
       <Text className={`text-base font-semibold ${colors.text}`}>{title}</Text>
       <Text className={`mt-1 text-sm ${colors.muted}`}>{description}</Text>
     </View>
@@ -39,11 +44,20 @@ function FeatureList({ colors }: { colors: ThemeColors }) {
 
 export default function HomeScreen({ navigation }: Props) {
   const colors = useThemeColors();
+  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParams>>();
 
   return (
     <View testID="home-welcome" className={`flex-1 ${colors.bg} px-4 pt-4`}>
       <Text className={`text-2xl font-bold ${colors.text}`}>Welcome</Text>
       <Text className={`mt-1 ${colors.muted}`}>rn-dev-agent test fixture</Text>
+      <Pressable
+        testID="home-search-btn"
+        className={`mt-3 flex-row items-center rounded-lg border ${colors.border} px-3 py-2.5 ${colors.card}`}
+        style={{ borderCurve: 'continuous' }}
+        onPress={() => rootNav.navigate('GlobalSearchModal')}
+      >
+        <Text className={`flex-1 ${colors.muted}`}>Search tasks, notifications, feed...</Text>
+      </Pressable>
       <FeatureList colors={colors} />
       <Pressable
         testID="home-feed-btn"

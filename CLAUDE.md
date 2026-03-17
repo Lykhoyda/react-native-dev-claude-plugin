@@ -43,9 +43,12 @@ rn-dev-agent/
 │   ├── rn-testing/                   # Maestro patterns, timing rules, testID usage
 │   │   ├── SKILL.md
 │   │   └── references/
-│   └── rn-debugging/                 # CDP vs bash decision table, error types
-│       ├── SKILL.md
-│       └── references/
+│   ├── rn-debugging/                 # CDP vs bash decision table, error types
+│   │   ├── SKILL.md
+│   │   └── references/
+│   └── rn-best-practices/            # 36 Vercel RN best-practice rules (perf, rendering, animation, state)
+│       ├── SKILL.md                  # Compact index + CRITICAL rules inline
+│       └── references/               # 36 individual rule files with full code examples
 ├── agents/
 │   ├── rn-tester.md                  # 7-step test verification protocol
 │   ├── rn-debugger.md                # Diagnostic evidence-gathering flow
@@ -131,7 +134,7 @@ Local-only (gitignored, not in repo):
 
 ## Conventions
 
-- CDP bridge is TypeScript (Node.js >= 18, LTS versions recommended)
+- CDP bridge is TypeScript (Node.js >= 22, LTS versions recommended)
 - Skills/agents/commands are Markdown files with YAML frontmatter
 - Maestro flows are YAML
 - Prefer maestro-runner over Maestro (3x faster, no JVM)

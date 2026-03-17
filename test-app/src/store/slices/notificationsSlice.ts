@@ -65,10 +65,14 @@ export const selectUnreadCount = createSelector(
   (items) => items.filter((i) => !i.read).length,
 );
 
-export const selectVisibleNotifications = (state: { notifications: NotificationsState }) =>
-  state.notifications.items.filter((i) => i.snoozedUntil === null || i.snoozedUntil <= Date.now());
+export const selectVisibleNotifications = createSelector(
+  [selectItems],
+  (items) => items.filter((i) => i.snoozedUntil === null || i.snoozedUntil <= Date.now()),
+);
 
-export const selectSnoozedCount = (state: { notifications: NotificationsState }) =>
-  state.notifications.items.filter((i) => i.snoozedUntil !== null && i.snoozedUntil > Date.now()).length;
+export const selectSnoozedCount = createSelector(
+  [selectItems],
+  (items) => items.filter((i) => i.snoozedUntil !== null && i.snoozedUntil > Date.now()).length,
+);
 
 export default notificationsSlice;

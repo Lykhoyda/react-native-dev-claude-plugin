@@ -57,6 +57,12 @@ export default function TasksScreen({ navigation }: Props) {
   const activeCount = useSelector(selectActiveTaskCount);
   const colors = useThemeColors();
 
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
   const handleAdd = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -65,15 +71,19 @@ export default function TasksScreen({ navigation }: Props) {
   };
 
   const handleSync = async () => {
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
     try {
       const res = await fetch(`${API_BASE}/api/tasks/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: unsyncedCount }),
+        signal: abortRef.current.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       dispatch(markAllSynced());
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       if (__DEV__) console.error('[Tasks] sync failed:', err);
     }
   };
@@ -210,9 +220,11 @@ export default function TasksScreen({ navigation }: Props) {
       >
         <Pressable
           testID="fab-create-task"
+          accessibilityLabel="Create new task"
+          accessibilityRole="button"
           onPress={() => rootNav.navigate('TaskWizard')}
           className="h-14 w-14 items-center justify-center rounded-full bg-blue-500"
-          style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 }}
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
         >
           <Text className="text-2xl font-bold text-white">+</Text>
         </Pressable>

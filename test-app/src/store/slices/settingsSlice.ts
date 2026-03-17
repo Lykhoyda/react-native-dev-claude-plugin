@@ -39,4 +39,7 @@ export const { toggleTheme, setLanguage, setLastSynced, completeOnboarding } = s
 export const selectLastSynced = (state: { settings: SettingsState }) =>
   state.settings.lastSynced;
 
+export const selectOnboardingComplete = (state: { settings: SettingsState }) =>
+  state.settings.onboardingComplete;
+
 export default settingsSlice;

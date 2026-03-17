@@ -26,7 +26,7 @@ description: |
   </example>
 tools: Glob, Grep, LS, Read
 model: opus
-skills: rn-testing
+skills: rn-testing, rn-best-practices
 color: green
 ---
 
@@ -59,6 +59,7 @@ Specify every file to create or modify with detailed change descriptions.
 
 ## RN-Specific Design Rules
 
+### Plugin Conventions
 - **Expo Router**: New routes follow file naming conventions — dynamic segments `[id].tsx`, route groups `(tabs)/`, layouts `_layout.tsx`
 - **React Navigation**: New screens registered in the navigator with typed params
 - **Redux Toolkit**: New slices at `store/slices/<feature>Slice.ts` with typed initial state, reducers, and exported actions/selectors
@@ -66,6 +67,22 @@ Specify every file to create or modify with detailed change descriptions.
 - **testIDs**: Every `Pressable`, `TouchableOpacity`, `Button`, `TextInput`, and scrollable container gets a testID. List items use dynamic testIDs: `testID={`item-${id}`}`
 - **Fast Refresh safety**: No side effects at module scope, no class components unless required
 - **`__DEV__` guards**: All dev-only code (store exposure, network mocks, debug logging) wrapped in `if (__DEV__)`
+
+### Vercel RN Best Practices (apply during design)
+
+Apply CRITICAL and HIGH rules from the `rn-best-practices` skill when making
+architecture decisions. Key constraints:
+
+- **Rendering safety** [RN-1.1, RN-1.2] (CRITICAL): Never design conditional renders with `&&` and falsy values. All strings must be inside `<Text>`.
+- **List architecture** [RN-2.1–2.8] (HIGH): All scrollable data must use FlashList/LegendList. List items receive primitives, not objects. Callbacks hoisted to list root. No queries or heavy hooks inside items.
+- **Animation** [RN-3.1–3.3] (HIGH): Only animate `transform` and `opacity`. Use `useDerivedValue` for computed animations. GestureDetector for animated press states.
+- **Scroll** [RN-4.1] (HIGH): Never store scroll position in useState. Use Reanimated shared values or refs.
+- **Navigation** [RN-5.1] (HIGH): Only native navigators — `native-stack`, native bottom tabs. No JS-based stack or tab navigators.
+- **State** [RN-6.1, RN-7.1] (MEDIUM): Minimize state variables. Derive values at render time. State holds ground truth, visuals are derived.
+- **UI** [RN-9.x] (MEDIUM): Pressable over TouchableOpacity. expo-image over Image. Native modals over JS bottom sheets. Native menus via zeego.
+
+Consult the full `rn-best-practices` skill for detailed code examples and
+all 36 rules across 14 categories.
 
 ## Output Format
 

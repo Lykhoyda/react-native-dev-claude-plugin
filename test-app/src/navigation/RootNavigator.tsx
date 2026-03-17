@@ -1,6 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSelector } from 'react-redux';
 import type {
   RootStackParams,
@@ -12,6 +13,7 @@ import type {
 } from './types';
 import { selectUnreadCount } from '../store/slices/notificationsSlice';
 import { selectActiveTaskCount } from '../store/slices/tasksSlice';
+import { selectOnboardingComplete } from '../store/slices/settingsSlice';
 import HomeScreen from '../screens/HomeScreen';
 import FeedScreen from '../screens/FeedScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -28,6 +30,7 @@ import ErrorLabModal from '../screens/ErrorLabModal';
 import ProfileEditModal from '../screens/ProfileEditModal';
 import TaskWizardModal from '../screens/TaskWizardModal';
 import DeepLinkScreen from '../screens/DeepLinkScreen';
+import GlobalSearchModal from '../screens/GlobalSearchModal';
 
 const RootStack = createNativeStackNavigator<RootStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
@@ -89,7 +92,18 @@ function TabNavigator() {
 
   return (
     <Tab.Navigator>
-      <Tab.Screen name="HomeTab" component={HomeStackNavigator} options={{ headerShown: false, title: 'Home', tabBarTestID: 'tab-home' }} />
+      <Tab.Screen
+        name="HomeTab"
+        component={HomeStackNavigator}
+        options={{
+          headerShown: false,
+          title: 'Home',
+          tabBarTestID: 'tab-home',
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+          ),
+        }}
+      />
       <Tab.Screen
         name="NotificationsTab"
         component={NotificationsStackNavigator}
@@ -98,6 +112,9 @@ function TabNavigator() {
           title: 'Notifications',
           tabBarTestID: 'tab-notifications',
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons name={focused ? 'notifications' : 'notifications-outline'} size={size} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -108,9 +125,23 @@ function TabNavigator() {
           title: 'Tasks',
           tabBarTestID: 'tab-tasks',
           tabBarBadge: activeTaskCount > 0 ? activeTaskCount : undefined,
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons name={focused ? 'checkbox' : 'checkbox-outline'} size={size} color={color} />
+          ),
         }}
       />
-      <Tab.Screen name="ProfileTab" component={ProfileStackNavigator} options={{ headerShown: false, title: 'Profile', tabBarTestID: 'tab-profile' }} />
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileStackNavigator}
+        options={{
+          headerShown: false,
+          title: 'Profile',
+          tabBarTestID: 'tab-profile',
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -150,12 +181,13 @@ const linking = {
         },
       },
       DeepLink: 'deeplink',
+      GlobalSearchModal: 'search',
     },
   },
 };
 
 export default function RootNavigator() {
-  const onboardingComplete = useSelector((state: { settings: { onboardingComplete: boolean } }) => state.settings.onboardingComplete);
+  const onboardingComplete = useSelector(selectOnboardingComplete);
 
   return (
     <RootStack.Navigator initialRouteName={onboardingComplete ? 'Tabs' : 'Onboarding'}>
@@ -164,6 +196,7 @@ export default function RootNavigator() {
       <RootStack.Screen name="ProfileEditModal" component={ProfileEditModal} options={{ presentation: 'modal', headerShown: false }} />
       <RootStack.Screen name="TaskWizard" component={TaskWizardModal} options={{ presentation: 'modal', headerShown: false }} />
       <RootStack.Screen name="ErrorLab" component={ErrorLabModal} options={{ presentation: 'modal', title: 'Error Lab' }} />
+      <RootStack.Screen name="GlobalSearchModal" component={GlobalSearchModal} options={{ headerShown: false, animation: 'slide_from_bottom' }} />
       <RootStack.Screen name="DeepLink" component={DeepLinkScreen} options={{ title: 'Deep Link' }} />
     </RootStack.Navigator>
   );

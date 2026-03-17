@@ -60,6 +60,7 @@ Each phase gates on the previous one. Claude asks for your approval before imple
 
 - **Live verification** — After implementation, Claude connects to your running app via CDP, navigates to the feature screen, checks the component tree, exercises interactions, and confirms store state matches expectations. No "trust me it works."
 - **Architect-designed proof flows** — The architect agent (Opus) designs the exact E2E verification steps during Phase 4, including which testIDs to check, which CDP expressions to run, and which screenshots to take. Phase 5.5 executes this plan mechanically.
+- **36 best-practice rules** — Integrated from [Vercel's React Native skills](https://github.com/vercel-labs/agent-skills). Every code review (Phase 6) and architecture design (Phase 4) checks against rules covering crash prevention, list performance, animation, state management, and UI patterns.
 - **Parallel exploration** — Phase 2 launches multiple explorer agents simultaneously to map different aspects of your codebase, so Claude understands your patterns before writing a single line.
 
 ### Example session

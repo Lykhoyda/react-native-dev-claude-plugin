@@ -1454,66 +1454,52 @@ A static documentation site hosted on GitHub Pages using a modern docs framework
 
 ---
 
-## Phase 45: Integrate Vercel React Native Skills (Planned — HIGH PRIORITY)
+## Phase 45: Integrate Vercel React Native Skills (DONE)
 
-**Status:** Planned — critical for code quality in complex codebases
+**Status:** Complete — 2026-03-17
 **Source:** [vercel-labs/agent-skills/react-native-skills](https://github.com/vercel-labs/agent-skills/tree/main/skills/react-native-skills)
-**Impact:** 38 battle-tested RN best practices integrated into every code review and implementation
+**Impact:** 36 best-practice rules integrated into every code review and architecture design
+**Decisions:** D336–D339
 
-### What This Is
+### What Was Built
 
-Vercel maintains a comprehensive set of 38 React Native best-practice rules covering rendering, list performance, animations, navigation, state management, UI patterns, and monorepo configuration. Each rule has:
-- Impact level (CRITICAL / HIGH / MEDIUM / LOW)
-- Incorrect code example with explanation
-- Correct code example with explanation
-- Tags for categorization
+New `rn-best-practices` skill containing all 36 Vercel React Native rules (MIT licensed), organized by impact tier across 14 categories. Integrated into the reviewer (Pass 4) and architect (design rules section) agents via `skills:` frontmatter.
 
-### Why This Is Critical
+### Files Changed
 
-Our `rn-code-reviewer` agents currently review for generic correctness and conventions. Integrating these rules means every Phase 6 review automatically checks for:
-- **CRITICAL:** Strings not wrapped in `<Text>` (crash), falsy `&&` rendering (renders "0")
-- **HIGH:** Non-virtualized lists, non-GPU animations, JS navigators instead of native
-- **HIGH:** TouchableOpacity instead of Pressable, inline objects in renderItem
-- **MEDIUM:** Unnecessary useState, non-memoized list items, React Compiler incompatibilities
+| File | Change |
+|------|--------|
+| `skills/rn-best-practices/SKILL.md` | **Created** — 36 rules inline, rule index table, organized CRITICAL → LOW |
+| `agents/rn-code-reviewer.md` | **Modified** — added `rn-best-practices` skill, new Pass 4 with `[RN-X.X]` citation format |
+| `agents/rn-code-architect.md` | **Modified** — added `rn-best-practices` skill, Vercel design rules sub-section |
+| `.claude-plugin/plugin.json` | **Modified** — registered `./skills/rn-best-practices` in skills array |
+| `CLAUDE.md` | **Modified** — updated plugin structure tree |
+| `README.md` | **Modified** — added best-practice rules to "What makes this different" |
 
-### Integration Plan
+### How It Works
 
-**Step 1: Import rules as skill references**
-- Clone the 38 rule `.md` files into `skills/rn-best-practices/references/`
-- Each rule becomes a reference file loadable by reviewer agents
+- **Phase 4 (Architecture):** Architect agent loads the skill and applies CRITICAL/HIGH rules when designing component structure, list architecture, animation approach, and navigation
+- **Phase 6 (Review):** Reviewer agent runs Pass 4 scanning all 36 rules by impact tier. CRITICAL rules always checked. HIGH/MEDIUM checked when relevant code patterns present. LOW only on 3+ occurrences. Findings cited as `[RN-2.1] Rule Name — IMPACT`
+- **No MCP server changes.** Rules flow through existing Phase 4 → Phase 6 pipeline
 
-**Step 2: Create `rn-best-practices` skill**
-- New skill in `skills/rn-best-practices/SKILL.md`
-- Categorizes rules by priority, references individual rule files
-- Triggered when reviewing RN code or implementing features
+### Rules by Category (36 total)
 
-**Step 3: Integrate into `rn-code-reviewer` agent**
-- Add reference to the best-practices skill in the reviewer agent prompt
-- Reviewer checks implementation against applicable rules
-- Reports violations with rule name, impact level, and fix suggestion
-
-**Step 4: Integrate into `rn-feature-dev` Phase 5**
-- During implementation, consult applicable rules before writing code
-- Prevent violations at write-time, not just review-time
-- E.g., when writing a FlatList, auto-apply `list-performance-virtualize` + `list-performance-item-memo`
-
-**Step 5: Integrate into `rn-code-architect` agent**
-- Architect blueprints reference applicable rules
-- E.g., "Use FlashList per `list-performance-virtualize`" in build sequence
-
-### Rules by Category (38 total)
-
-| Category | Count | Impact | Key Rules |
-|----------|-------|--------|-----------|
-| List Performance | 8 | CRITICAL | virtualize, item-memo, callbacks, inline-objects, function-refs, images, expensive, types |
-| Animation | 3 | HIGH | gpu-properties, gesture-detector-press, derived-value |
-| Navigation | 1 | HIGH | native-navigators |
-| UI Patterns | 9 | HIGH-MED | expo-image, pressable, safe-area, menus, native-modals, measure-views, styling, gallery, scrollview-inset |
-| State | 5 | MEDIUM | minimize, dispatcher, fallback, compiler-destructure, compiler-reanimated |
-| Rendering | 2 | CRITICAL | text-in-text (crash prevention), no-falsy-and |
-| Design System | 1 | MEDIUM | compound-components |
-| Monorepo | 2 | LOW | native-deps-in-app, single-versions |
-| Config | 3 | LOW | fonts-config-plugin, imports-design-system, js-hoist-intl |
+| Category | Count | Impact |
+|----------|-------|--------|
+| Core Rendering | 2 | CRITICAL |
+| List Performance | 8 | HIGH |
+| Animation | 3 | HIGH |
+| Scroll Performance | 1 | HIGH |
+| Navigation | 1 | HIGH |
+| React State | 3 | MEDIUM |
+| State Architecture | 1 | MEDIUM |
+| React Compiler | 2 | MEDIUM |
+| User Interface | 9 | MEDIUM |
+| Design System | 1 | MEDIUM |
+| Monorepo | 2 | LOW |
+| Third-Party Deps | 1 | LOW |
+| JavaScript | 1 | LOW |
+| Fonts | 1 | LOW |
 
 ---
 
@@ -1525,7 +1511,7 @@ Our `rn-code-reviewer` agents currently review for generic correctness and conve
 
 ---
 
-*Last updated: 2026-03-17 — 46 phases, 22 tools, 21 stories, 11 libraries*
+*Last updated: 2026-03-17 — 46 phases (45 done), 22 tools, 21 stories, 11 libraries, 4 skills, 36 best-practice rules*
 
 A local-only self-improvement system that captures failure patterns, classifies them, distills heuristics, and promotes validated learnings into the agent's active context. Inspired by Voyager (skill library), Reflexion (episodic memory), and DSPy (metric-driven optimization).
 
