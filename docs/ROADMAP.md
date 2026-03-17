@@ -1454,7 +1454,70 @@ A static documentation site hosted on GitHub Pages using a modern docs framework
 
 ---
 
-## Phase 45: Experience Engine (Planned)
+## Phase 45: Integrate Vercel React Native Skills (Planned — HIGH PRIORITY)
+
+**Status:** Planned — critical for code quality in complex codebases
+**Source:** [vercel-labs/agent-skills/react-native-skills](https://github.com/vercel-labs/agent-skills/tree/main/skills/react-native-skills)
+**Impact:** 38 battle-tested RN best practices integrated into every code review and implementation
+
+### What This Is
+
+Vercel maintains a comprehensive set of 38 React Native best-practice rules covering rendering, list performance, animations, navigation, state management, UI patterns, and monorepo configuration. Each rule has:
+- Impact level (CRITICAL / HIGH / MEDIUM / LOW)
+- Incorrect code example with explanation
+- Correct code example with explanation
+- Tags for categorization
+
+### Why This Is Critical
+
+Our `rn-code-reviewer` agents currently review for generic correctness and conventions. Integrating these rules means every Phase 6 review automatically checks for:
+- **CRITICAL:** Strings not wrapped in `<Text>` (crash), falsy `&&` rendering (renders "0")
+- **HIGH:** Non-virtualized lists, non-GPU animations, JS navigators instead of native
+- **HIGH:** TouchableOpacity instead of Pressable, inline objects in renderItem
+- **MEDIUM:** Unnecessary useState, non-memoized list items, React Compiler incompatibilities
+
+### Integration Plan
+
+**Step 1: Import rules as skill references**
+- Clone the 38 rule `.md` files into `skills/rn-best-practices/references/`
+- Each rule becomes a reference file loadable by reviewer agents
+
+**Step 2: Create `rn-best-practices` skill**
+- New skill in `skills/rn-best-practices/SKILL.md`
+- Categorizes rules by priority, references individual rule files
+- Triggered when reviewing RN code or implementing features
+
+**Step 3: Integrate into `rn-code-reviewer` agent**
+- Add reference to the best-practices skill in the reviewer agent prompt
+- Reviewer checks implementation against applicable rules
+- Reports violations with rule name, impact level, and fix suggestion
+
+**Step 4: Integrate into `rn-feature-dev` Phase 5**
+- During implementation, consult applicable rules before writing code
+- Prevent violations at write-time, not just review-time
+- E.g., when writing a FlatList, auto-apply `list-performance-virtualize` + `list-performance-item-memo`
+
+**Step 5: Integrate into `rn-code-architect` agent**
+- Architect blueprints reference applicable rules
+- E.g., "Use FlashList per `list-performance-virtualize`" in build sequence
+
+### Rules by Category (38 total)
+
+| Category | Count | Impact | Key Rules |
+|----------|-------|--------|-----------|
+| List Performance | 8 | CRITICAL | virtualize, item-memo, callbacks, inline-objects, function-refs, images, expensive, types |
+| Animation | 3 | HIGH | gpu-properties, gesture-detector-press, derived-value |
+| Navigation | 1 | HIGH | native-navigators |
+| UI Patterns | 9 | HIGH-MED | expo-image, pressable, safe-area, menus, native-modals, measure-views, styling, gallery, scrollview-inset |
+| State | 5 | MEDIUM | minimize, dispatcher, fallback, compiler-destructure, compiler-reanimated |
+| Rendering | 2 | CRITICAL | text-in-text (crash prevention), no-falsy-and |
+| Design System | 1 | MEDIUM | compound-components |
+| Monorepo | 2 | LOW | native-deps-in-app, single-versions |
+| Config | 3 | LOW | fonts-config-plugin, imports-design-system, js-hoist-intl |
+
+---
+
+## Phase 46: Experience Engine (Planned)
 
 **Status:** Designed — spec at `docs/superpowers/specs/2026-03-16-experience-engine-design.md`
 **Impact:** Self-improving plugin that learns from failures — the tool gets better with every use
@@ -1462,7 +1525,7 @@ A static documentation site hosted on GitHub Pages using a modern docs framework
 
 ---
 
-*Last updated: 2026-03-16 — 45 phases, 22 tools, 21 stories, 11 libraries*
+*Last updated: 2026-03-17 — 46 phases, 22 tools, 21 stories, 11 libraries*
 
 A local-only self-improvement system that captures failure patterns, classifies them, distills heuristics, and promotes validated learnings into the agent's active context. Inspired by Voyager (skill library), Reflexion (episodic memory), and DSPy (metric-driven optimization).
 
