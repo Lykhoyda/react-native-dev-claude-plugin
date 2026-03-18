@@ -1,14 +1,10 @@
 import { safeStringify, resolvePath } from './utils';
 const stores = new Map();
-let autoDetected = false;
 export function registerStore(reg) {
     stores.set(reg.name, reg);
 }
 function autoDetectStores() {
     var _a;
-    if (autoDetected)
-        return;
-    autoDetected = true;
     const g = globalThis;
     if (g.__REDUX_STORE__ && typeof g.__REDUX_STORE__.getState === 'function') {
         const rs = g.__REDUX_STORE__;

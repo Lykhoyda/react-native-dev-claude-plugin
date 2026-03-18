@@ -248,6 +248,8 @@ export class CDPClient {
     try {
       this._state = 'disconnected';
       this._helpersInjected = false;
+      this._bridgeDetected = false;
+      this._bridgeVersion = null;
       this._connectedTarget = null;
 
       if (this.ws) {
@@ -633,6 +635,8 @@ export class CDPClient {
   private handleClose(code: number): void {
     this._state = 'disconnected';
     this._helpersInjected = false;
+    this._bridgeDetected = false;
+    this._bridgeVersion = null;
     this._connectedTarget = null;
 
     if (this.disposed || this.reconnecting) return;

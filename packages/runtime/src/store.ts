@@ -2,15 +2,12 @@ import type { StoreRegistration } from './types';
 import { safeStringify, resolvePath } from './utils';
 
 const stores = new Map<string, StoreRegistration>();
-let autoDetected = false;
 
 export function registerStore(reg: StoreRegistration): void {
   stores.set(reg.name, reg);
 }
 
 function autoDetectStores(): void {
-  if (autoDetected) return;
-  autoDetected = true;
 
   const g = globalThis as Record<string, unknown>;
 

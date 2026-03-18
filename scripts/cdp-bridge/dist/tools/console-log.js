@@ -28,9 +28,16 @@ export function createConsoleLogHandler(getClient) {
         catch {
             return failResult(`Failed to parse console response: ${result.value.slice(0, 200)}`);
         }
-        if (!Array.isArray(parsed)) {
-            return failResult('Unexpected response from getConsole — expected array');
+        let entries;
+        if (Array.isArray(parsed)) {
+            entries = parsed;
         }
-        return okResult({ count: parsed.length, entries: parsed });
+        else if (parsed && typeof parsed === 'object' && 'entries' in parsed && Array.isArray(parsed.entries)) {
+            entries = parsed.entries;
+        }
+        else {
+            return failResult('Unexpected response from getConsole — expected array or { entries }');
+        }
+        return okResult({ count: entries.length, entries });
     });
 }

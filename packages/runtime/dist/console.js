@@ -1,13 +1,14 @@
 import { safeStringify } from './utils';
 const MAX_ENTRIES = 200;
 let buffer = [];
-let installed = false;
+const SENTINEL_KEY = '__RN_DEV_BRIDGE_CONSOLE_PATCHED__';
 export function installConsolePatch() {
-    if (installed)
+    const g = globalThis;
+    if (g[SENTINEL_KEY])
         return;
     if (typeof globalThis.console === 'undefined')
         return;
-    installed = true;
+    g[SENTINEL_KEY] = true;
     const levels = ['log', 'warn', 'error', 'info', 'debug'];
     for (const level of levels) {
         const original = globalThis.console[level];

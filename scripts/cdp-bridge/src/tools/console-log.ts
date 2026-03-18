@@ -35,10 +35,15 @@ export function createConsoleLogHandler(getClient: () => CDPClient) {
       return failResult(`Failed to parse console response: ${result.value.slice(0, 200)}`);
     }
 
-    if (!Array.isArray(parsed)) {
-      return failResult('Unexpected response from getConsole — expected array');
+    let entries: unknown[];
+    if (Array.isArray(parsed)) {
+      entries = parsed;
+    } else if (parsed && typeof parsed === 'object' && 'entries' in parsed && Array.isArray((parsed as { entries: unknown[] }).entries)) {
+      entries = (parsed as { entries: unknown[] }).entries;
+    } else {
+      return failResult('Unexpected response from getConsole — expected array or { entries }');
     }
 
-    return okResult({ count: parsed.length, entries: parsed });
+    return okResult({ count: entries.length, entries });
   });
 }

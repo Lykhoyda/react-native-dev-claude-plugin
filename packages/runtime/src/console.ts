@@ -8,12 +8,13 @@ interface ConsoleEntry {
 
 const MAX_ENTRIES = 200;
 let buffer: ConsoleEntry[] = [];
-let installed = false;
+const SENTINEL_KEY = '__RN_DEV_BRIDGE_CONSOLE_PATCHED__';
 
 export function installConsolePatch(): void {
-  if (installed) return;
+  const g = globalThis as Record<string, unknown>;
+  if (g[SENTINEL_KEY]) return;
   if (typeof globalThis.console === 'undefined') return;
-  installed = true;
+  g[SENTINEL_KEY] = true;
 
   const levels = ['log', 'warn', 'error', 'info', 'debug'] as const;
   for (const level of levels) {
