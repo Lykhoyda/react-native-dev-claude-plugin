@@ -39,7 +39,7 @@ export function withConnection(getClient, handler, options = {}) {
                         }
                     }
                     else {
-                        return failResult(`Auto-connect failed: ${msg}`);
+                        return failResult(`Auto-connect failed: ${msg}. If Metro was restarted, wait a moment then call cdp_status to reconnect.`);
                     }
                 }
             }
@@ -80,7 +80,7 @@ export function withConnection(getClient, handler, options = {}) {
                         }
                     }
                 }
-                return failResult('Connection lost during operation and reconnect timed out.');
+                return failResult('Connection lost during operation and reconnect timed out. Metro may be restarting — call cdp_status to retry connection, or check: curl localhost:8081/status');
             }
             // Path B (B58 fix): Stale-target probe — WS is open but JS context may be dead
             if (client.isConnected) {

@@ -1141,3 +1141,9 @@ Added `references/navigation-patterns.md` with the complete B75 diagnostic flow:
 
 ### D346: Three rn-dev-agent custom rules added to best-practices skill
 Added rules [15.1] query-cache-reactive (HIGH), [15.2] reanimated-in-lists (HIGH), [15.3] theme-memoization-lists (HIGH). These were discovered through S23 (Gemini found non-reactive getQueryData + Reanimated in FlatList) and S24 (reviewer found colors prop defeating memo). Vercel's 36 rules don't cover these RN-specific patterns. Keyword triggers updated in reviewer to detect these patterns.
+
+### D347: Reconnect window increased from 10 to 30 attempts (Phase 43)
+Metro cache clear (`npx expo start --clear`) can take 20-30 seconds. The previous 10 attempts × 1s = ~13s window wasn't enough. Increased to 30 attempts × 1.5s = ~46.5s window. This covers typical Metro restart times without excessive polling on genuine disconnects.
+
+### D348: Background Metro health poll after reconnect window expires (Phase 43)
+When the reconnect loop fails (Metro was down for >46s), the client stays disconnected until `cdp_status` is called. Added a 5-second interval background poll that checks `http://localhost:PORT/status` for Metro. When Metro comes back, it triggers a fresh reconnect cycle. The poll stops automatically when connected, disposed, or already reconnecting. This makes recovery automatic instead of requiring manual `cdp_status` calls.

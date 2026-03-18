@@ -5,8 +5,8 @@ const CDP_TIMEOUT_MS = 5000;
 const REACT_READY_TIMEOUT_MS = 30000;
 const REACT_READY_POLL_MS = 500;
 const RECONNECT_DELAY_MS = 1500;
-const RECONNECT_ATTEMPTS = 10;
-const RECONNECT_RETRY_MS = 1000;
+const RECONNECT_ATTEMPTS = 30;
+const RECONNECT_RETRY_MS = 1500;
 const DISCOVERY_TIMEOUT_MS = 1500;
 const DEFAULT_PORTS = [8081, 8082, 19000, 19006];
 export class CDPClient {
@@ -26,6 +26,7 @@ export class CDPClient {
     _state = 'disconnected';
     _connectionGeneration = 0;
     _softReconnectRequested = false;
+    _bgPollTimer = null;
     constructor(port) {
         this._port = port ?? 8081;
         this._consoleBuffer = new RingBuffer(200);
@@ -242,6 +243,7 @@ export class CDPClient {
         this._state = 'disconnected';
         this._helpersInjected = false;
         this._connectedTarget = null;
+        this.stopBackgroundPoll();
         if (this.ws) {
             this.ws.removeAllListeners();
             if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
@@ -617,7 +619,40 @@ export class CDPClient {
         }
         this.reconnecting = false;
         this._state = 'disconnected';
-        console.error('CDP: reconnect failed after ' + RECONNECT_ATTEMPTS + ' attempts');
+        console.error('CDP: reconnect failed after ' + RECONNECT_ATTEMPTS + ' attempts. Starting background poll...');
+        this.startBackgroundPoll();
+    }
+    startBackgroundPoll() {
+        if (this._bgPollTimer || this.disposed)
+            return;
+        this._bgPollTimer = setInterval(async () => {
+            if (this.disposed || this.isConnected || this.reconnecting) {
+                this.stopBackgroundPoll();
+                return;
+            }
+            try {
+                const res = await fetch(`http://127.0.0.1:${this._port}/status`, {
+                    signal: AbortSignal.timeout(2000),
+                });
+                const text = await res.text();
+                if (text === 'packager-status:running') {
+                    console.error('CDP: Metro detected via background poll. Reconnecting...');
+                    this.stopBackgroundPoll();
+                    this.reconnecting = true;
+                    this._state = 'reconnecting';
+                    this.reconnect().catch(() => { this.reconnecting = false; });
+                }
+            }
+            catch {
+                // Metro not available yet — keep polling
+            }
+        }, 5000);
+    }
+    stopBackgroundPoll() {
+        if (this._bgPollTimer) {
+            clearInterval(this._bgPollTimer);
+            this._bgPollTimer = null;
+        }
     }
     rejectAllPending(reason) {
         for (const { reject, timer } of this.pending.values()) {
