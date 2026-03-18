@@ -1,3 +1,4 @@
+import '@rn-dev-agent/runtime';
 import React from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -5,6 +6,7 @@ import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { registerNavRef, registerStore } from '@rn-dev-agent/runtime';
 import { store, persistor } from './store';
 import RootNavigator, { linking } from './navigation/RootNavigator';
 import OfflineBanner from './components/OfflineBanner';
@@ -26,6 +28,8 @@ const navigationRef = createNavigationContainerRef<RootStackParams>();
 
 if (__DEV__) {
   (globalThis as Record<string, unknown>).__NAV_REF__ = navigationRef;
+  registerNavRef(navigationRef);
+  registerStore({ name: 'redux', type: 'redux', getState: () => store.getState(), dispatch: (action) => store.dispatch(action as never) });
 }
 
 function SyncBridge({ children }: { children: React.ReactNode }) {

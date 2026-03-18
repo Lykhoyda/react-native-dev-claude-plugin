@@ -3,13 +3,15 @@ import { symbolicateErrors } from '../symbolicate.js';
 export function createErrorLogHandler(getClient) {
     return withConnection(getClient, async (args, client) => {
         if (args.clear) {
-            const clearResult = await client.evaluate('__RN_AGENT.clearErrors()');
+            const clearExpr = client.bridgeDetected ? '__RN_DEV_BRIDGE__.clearErrors()' : '__RN_AGENT.clearErrors()';
+            const clearResult = await client.evaluate(clearExpr);
             if (clearResult.error) {
                 return failResult(`Failed to clear errors: ${clearResult.error}`);
             }
             return okResult({ cleared: true });
         }
-        const result = await client.evaluate('__RN_AGENT.getErrors()');
+        const getExpr = client.bridgeDetected ? '__RN_DEV_BRIDGE__.getErrors()' : '__RN_AGENT.getErrors()';
+        const result = await client.evaluate(getExpr);
         if (result.error) {
             return failResult(`Error log error: ${result.error}`);
         }

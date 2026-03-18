@@ -1147,3 +1147,17 @@ Metro cache clear (`npx expo start --clear`) can take 20-30 seconds. The previou
 
 ### D348: Background Metro health poll after reconnect window expires (Phase 43)
 When the reconnect loop fails (Metro was down for >46s), the client stays disconnected until `cdp_status` is called. Added a 5-second interval background poll that checks `http://localhost:PORT/status` for Metro. When Metro comes back, it triggers a fresh reconnect cycle. The poll stops automatically when connected, disposed, or already reconnecting. This makes recovery automatic instead of requiring manual `cdp_status` calls.
+
+## 2026-03-18: Phase 41 — App-Side Dev Bridge
+
+### D349: @rn-dev-agent/runtime as side-effectful import package
+The bridge package uses a `import '@rn-dev-agent/runtime'` side-effect pattern (same as react-native-reanimated). This installs console patches and error tracking at app startup — before CDP connects — so early logs and crashes are captured. The `__DEV__` guard ensures zero production impact.
+
+### D350: Bridge as progressive enhancement, not wholesale replacement
+The bridge coexists with injected helpers. When `__RN_DEV_BRIDGE__` is detected, 5 tools prefer it (nav state, store state, dispatch, console, errors). When not detected, all tools fall back to `__RN_AGENT` fiber walks. This means zero behavior change for apps that haven't installed the package.
+
+### D351: getTree and interact stay in injected helpers for v1
+The fiber tree walker and testID interaction are the most complex helpers and provide the most value via fiber walking. The bridge v1 focuses on the 5 capabilities where app-side registration provides clear advantages over fiber heuristics: navigation, store, console, errors, and dispatch.
+
+### D352: Auto-detect legacy globals for backward compatibility
+The bridge's store.ts auto-detects `globalThis.__REDUX_STORE__` and `globalThis.__ZUSTAND_STORES__` on first call. Apps that already expose stores via these globals don't need to change anything — the bridge picks them up automatically.

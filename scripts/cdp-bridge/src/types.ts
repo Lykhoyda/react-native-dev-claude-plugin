@@ -70,6 +70,8 @@ export interface StatusResult {
     networkDomain: boolean;
     fiberTree: boolean;
     networkFallback: boolean;
+    bridgeDetected: boolean;
+    bridgeVersion: number | null;
   };
 }
 

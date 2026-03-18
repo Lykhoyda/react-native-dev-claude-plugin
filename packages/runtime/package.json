@@ -1,0 +1,21 @@
+{
+  "name": "@rn-dev-agent/runtime",
+  "version": "0.1.0",
+  "description": "App-side dev bridge for rn-dev-agent — replaces fragile fiber walks with stable public APIs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "sideEffects": ["src/index.ts", "dist/index.js"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.72.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react-native": ">=0.72.0"
+  },
+  "license": "MIT",
+  "files": ["dist/", "src/", "README.md"]
+}

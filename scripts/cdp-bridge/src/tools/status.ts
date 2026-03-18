@@ -93,6 +93,8 @@ export function createStatusHandler(
           networkDomain: client.networkMode === 'cdp',
           fiberTree,
           networkFallback: client.networkMode === 'hook',
+          bridgeDetected: client.bridgeDetected,
+          bridgeVersion: client.bridgeVersion,
         },
       };
 

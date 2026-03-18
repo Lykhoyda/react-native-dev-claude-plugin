@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { RingBuffer } from './ring-buffer.js';
 import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from './injected-helpers.js';
+import { detectBridge } from './bridge-detector.js';
 import type {
   CDPMessage,
   PendingCall,
@@ -38,6 +39,8 @@ export class CDPClient {
   private _connectionGeneration = 0;
   private _softReconnectRequested = false;
   private _bgPollTimer: ReturnType<typeof setInterval> | null = null;
+  private _bridgeDetected = false;
+  private _bridgeVersion: number | null = null;
 
   constructor(port?: number) {
     this._port = port ?? 8081;
@@ -55,6 +58,8 @@ export class CDPClient {
   get consoleBuffer(): RingBuffer<ConsoleEntry> { return this._consoleBuffer; }
   get networkBuffer(): RingBuffer<NetworkEntry> { return this._networkBuffer; }
   get connectionGeneration(): number { return this._connectionGeneration; }
+  get bridgeDetected(): boolean { return this._bridgeDetected; }
+  get bridgeVersion(): number | null { return this._bridgeVersion; }
 
   async reinjectHelpers(): Promise<boolean> {
     if (!this.isConnected) return false;
@@ -71,6 +76,7 @@ export class CDPClient {
       return false;
     }
     this._helpersInjected = true;
+    detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => {});
     return true;
   }
 
@@ -266,6 +272,8 @@ export class CDPClient {
     this.disposed = true;
     this._state = 'disconnected';
     this._helpersInjected = false;
+    this._bridgeDetected = false;
+    this._bridgeVersion = null;
     this._connectedTarget = null;
     this.stopBackgroundPoll();
 
@@ -536,6 +544,7 @@ export class CDPClient {
     }
 
     this._helpersInjected = true;
+    detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => {});
 
     if (this._networkMode === 'none') {
       const hookResult = await this.evaluate(NETWORK_HOOK_SCRIPT);

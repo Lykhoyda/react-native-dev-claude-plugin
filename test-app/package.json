@@ -41,6 +41,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@rn-dev-agent/runtime": "file:../packages/runtime",
     "@types/react": "~18.3.0",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~8.0.1",

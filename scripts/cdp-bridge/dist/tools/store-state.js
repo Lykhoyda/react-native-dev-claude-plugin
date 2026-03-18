@@ -3,7 +3,9 @@ export function createStoreStateHandler(getClient) {
     return withConnection(getClient, async (args, client) => {
         const pathArg = args.path !== undefined ? JSON.stringify(args.path) : 'undefined';
         const typeArg = args.storeType ? JSON.stringify(args.storeType) : 'undefined';
-        const expression = `__RN_AGENT.getStoreState(${pathArg}, ${typeArg})`;
+        const expression = client.bridgeDetected
+            ? `__RN_DEV_BRIDGE__.getStoreState(${pathArg}, ${typeArg})`
+            : `__RN_AGENT.getStoreState(${pathArg}, ${typeArg})`;
         const result = await client.evaluate(expression);
         if (result.error) {
             return failResult(`Store state error: ${result.error}`);

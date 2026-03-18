@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { RingBuffer } from './ring-buffer.js';
 import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from './injected-helpers.js';
+import { detectBridge } from './bridge-detector.js';
 const CDP_TIMEOUT_MS = 5000;
 const REACT_READY_TIMEOUT_MS = 30000;
 const REACT_READY_POLL_MS = 500;
@@ -27,6 +28,8 @@ export class CDPClient {
     _connectionGeneration = 0;
     _softReconnectRequested = false;
     _bgPollTimer = null;
+    _bridgeDetected = false;
+    _bridgeVersion = null;
     constructor(port) {
         this._port = port ?? 8081;
         this._consoleBuffer = new RingBuffer(200);
@@ -42,6 +45,8 @@ export class CDPClient {
     get consoleBuffer() { return this._consoleBuffer; }
     get networkBuffer() { return this._networkBuffer; }
     get connectionGeneration() { return this._connectionGeneration; }
+    get bridgeDetected() { return this._bridgeDetected; }
+    get bridgeVersion() { return this._bridgeVersion; }
     async reinjectHelpers() {
         if (!this.isConnected)
             return false;
@@ -58,6 +63,7 @@ export class CDPClient {
             return false;
         }
         this._helpersInjected = true;
+        detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => { });
         return true;
     }
     async autoConnect(portHint, platformFilter) {
@@ -242,6 +248,8 @@ export class CDPClient {
         this.disposed = true;
         this._state = 'disconnected';
         this._helpersInjected = false;
+        this._bridgeDetected = false;
+        this._bridgeVersion = null;
         this._connectedTarget = null;
         this.stopBackgroundPoll();
         if (this.ws) {
@@ -494,6 +502,7 @@ export class CDPClient {
             return;
         }
         this._helpersInjected = true;
+        detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => { });
         if (this._networkMode === 'none') {
             const hookResult = await this.evaluate(NETWORK_HOOK_SCRIPT);
             if (hookResult.error) {

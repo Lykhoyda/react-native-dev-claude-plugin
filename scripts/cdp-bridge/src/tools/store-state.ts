@@ -5,7 +5,9 @@ export function createStoreStateHandler(getClient: () => CDPClient) {
   return withConnection(getClient, async (args: { path?: string; storeType?: string }, client) => {
     const pathArg = args.path !== undefined ? JSON.stringify(args.path) : 'undefined';
     const typeArg = args.storeType ? JSON.stringify(args.storeType) : 'undefined';
-    const expression = `__RN_AGENT.getStoreState(${pathArg}, ${typeArg})`;
+    const expression = client.bridgeDetected
+      ? `__RN_DEV_BRIDGE__.getStoreState(${pathArg}, ${typeArg})`
+      : `__RN_AGENT.getStoreState(${pathArg}, ${typeArg})`;
 
     const result = await client.evaluate(expression);
 
