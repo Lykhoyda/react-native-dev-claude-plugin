@@ -97,8 +97,11 @@ table in the skill, then **you MUST read** the full `references/<rule>.md` file
 for any rule whose category is detected in the code under review.
 
 **Keyword triggers — if you see these patterns, MUST read the corresponding rules:**
-- `FlatList`, `FlashList`, `LegendList`, `SectionList`, `renderItem` → read ALL `references/list-performance-*.md`
+- `FlatList`, `FlashList`, `LegendList`, `SectionList`, `renderItem` → read ALL `references/list-performance-*.md` + `references/reanimated-in-lists.md` + `references/theme-memoization-lists.md`
 - `Animated`, `Reanimated`, `useSharedValue`, `useAnimatedStyle`, `withTiming` → read `references/animation-*.md`
+- `entering`, `exiting`, `Layout.springify` inside a list → read `references/reanimated-in-lists.md`
+- `useThemeColors`, `useColorScheme`, `useWindowDimensions` passed as prop to list items → read `references/theme-memoization-lists.md`
+- `queryClient.getQueryData`, `useQueryClient` inside `useMemo`/render → read `references/query-cache-reactive.md`
 - `onScroll`, `scrollEventThrottle`, `useAnimatedScrollHandler` → read `references/scroll-position-no-state.md`
 - `createStackNavigator`, `createBottomTabNavigator` → read `references/navigation-native-navigators.md`
 - `useState`, `useReducer`, `useEffect` with setState → read `references/react-state-*.md`

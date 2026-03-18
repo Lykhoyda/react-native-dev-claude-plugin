@@ -177,4 +177,5 @@ binary name discovery), see the **rn-device-control** skill.
 ## Additional Resources
 
 - **`references/common-error-patterns.md`** — Diagnostic recipes for common RN errors
+- **`references/navigation-patterns.md`** — Navigation debugging: modal→tab navigation (B75), nested navigator patterns, CDP navigate usage
 - **`references/capability-matrix.md`** — CDP feature support by React Native version

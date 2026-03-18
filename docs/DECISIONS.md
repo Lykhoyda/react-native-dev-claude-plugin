@@ -1135,3 +1135,9 @@ Added deterministic keyword-to-rule mapping in the Pass 4 prompt. When the revie
 
 ### D344: HighlightedText wraps all array items in Text elements (Gemini review)
 Raw strings in a React Native array cause "missing key" warnings and inconsistent rendering. Wrapped non-matching text parts in `<Text key={i}>` elements, same as the matching parts. All items in the parts array now have explicit keys.
+
+### D345: B75 navigation debugging recipe added to rn-debugging skill
+Added `references/navigation-patterns.md` with the complete B75 diagnostic flow: symptoms, root cause, all approaches tested (6 that fail + 1 that works), recommended workaround using DeviceEventEmitter, and CDP debugging steps. The debugger agent can now reference this when users encounter modal→tab navigation issues.
+
+### D346: Three rn-dev-agent custom rules added to best-practices skill
+Added rules [15.1] query-cache-reactive (HIGH), [15.2] reanimated-in-lists (HIGH), [15.3] theme-memoization-lists (HIGH). These were discovered through S23 (Gemini found non-reactive getQueryData + Reanimated in FlatList) and S24 (reviewer found colors prop defeating memo). Vercel's 36 rules don't cover these RN-specific patterns. Keyword triggers updated in reviewer to detect these patterns.

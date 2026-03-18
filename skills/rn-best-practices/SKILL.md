@@ -14,7 +14,8 @@ description: >
 
 # React Native Best Practice Rules
 
-36 rules from [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT License).
+36 rules from [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) (MIT License)
+plus 3 rn-dev-agent rules discovered through story testing.
 Each rule has full incorrect/correct code examples in `references/<rule-name>.md`.
 
 ---
@@ -62,6 +63,9 @@ category present in the code under review.
 | 12.1 | Import from design system folder | LOW | `references/imports-design-system-folder.md` |
 | 13.1 | Hoist Intl formatter creation | LOW | `references/js-hoist-intl.md` |
 | 14.1 | Load fonts natively at build time | LOW | `references/fonts-config-plugin.md` |
+| 15.1 | Use reactive query hooks, not imperative cache reads | HIGH | `references/query-cache-reactive.md` |
+| 15.2 | Avoid Reanimated layout animations in virtualized lists | HIGH | `references/reanimated-in-lists.md` |
+| 15.3 | Consume theme hooks inside list items, not in renderItem | HIGH | `references/theme-memoization-lists.md` |
 
 ---
 
