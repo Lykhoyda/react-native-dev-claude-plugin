@@ -3,8 +3,9 @@
 # Checks for app crashes and compilation errors after RN source file edits.
 # Uses last-write-wins debounce: only the most recent edit triggers the check.
 #
-# Skips when: file is outside an RN project, no simulator/emulator running,
-# Metro not running. Non-blocking warning for "no Hermes target" (GH #1).
+# Skips when: no active CDP session (rn-dev-agent not in use), file is outside
+# an RN project, no simulator/emulator running, Metro not running.
+# Non-blocking warning for "no Hermes target" (GH #1, #2).
 
 set -uo pipefail
 
@@ -24,6 +25,14 @@ if [[ "$file_path" =~ \.(d\.ts)$ ]]; then
   exit 0
 fi
 if [[ "$file_path" =~ (__tests__|\.test\.|\.spec\.|\.config\.) ]]; then
+  exit 0
+fi
+
+# --- Guard: only run if the CDP bridge has an active session ---
+# The MCP server writes this flag when connected to a Hermes target.
+# Without it, there's no active rn-dev-agent workflow — skip.
+CDP_ACTIVE_FLAG="${TMPDIR:-/tmp}/rn-dev-agent-cdp-active"
+if [[ ! -f "$CDP_ACTIVE_FLAG" ]]; then
   exit 0
 fi
 

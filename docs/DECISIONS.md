@@ -1170,3 +1170,6 @@ The post-edit health check fires false positives when Metro is running and simul
 
 ### D355: Bridgeless mode target detection in health check
 RN 0.81.5+ Bridgeless targets put "React Native" in the CDP target's `description` field, not `title`. Extended the jq filter to check both `(.title | test(...)) or (.description | test(...))` — matching the same logic already in `cdp-client.ts`.
+
+### D356: Gate health check on active CDP session via flag file
+The post-edit health check hook fired on every code edit in RN projects, even when rn-dev-agent wasn't being used. Now the CDP bridge writes `/tmp/rn-dev-agent-cdp-active` on successful connection and removes it on disconnect/reconnect failure. The hook checks for this flag first — no active CDP session means no health check.

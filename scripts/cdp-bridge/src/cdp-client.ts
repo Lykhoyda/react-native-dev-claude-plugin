@@ -1,3 +1,6 @@
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import WebSocket from 'ws';
 import { RingBuffer } from './ring-buffer.js';
 import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from './injected-helpers.js';
@@ -12,6 +15,7 @@ import type {
   EvaluateResult,
 } from './types.js';
 
+const CDP_ACTIVE_FLAG = join(tmpdir(), 'rn-dev-agent-cdp-active');
 const CDP_TIMEOUT_MS = 5000;
 const REACT_READY_TIMEOUT_MS = 30000;
 const REACT_READY_POLL_MS = 500;
@@ -61,6 +65,14 @@ export class CDPClient {
   get bridgeDetected(): boolean { return this._bridgeDetected; }
   get bridgeVersion(): number | null { return this._bridgeVersion; }
 
+  private setActiveFlag(): void {
+    try { writeFileSync(CDP_ACTIVE_FLAG, String(process.pid)); } catch { /* best-effort */ }
+  }
+
+  private clearActiveFlag(): void {
+    try { unlinkSync(CDP_ACTIVE_FLAG); } catch { /* may not exist */ }
+  }
+
   async reinjectHelpers(): Promise<boolean> {
     if (!this.isConnected) return false;
     await this.waitForReact(REACT_READY_TIMEOUT_MS);
@@ -76,6 +88,7 @@ export class CDPClient {
       return false;
     }
     this._helpersInjected = true;
+    this.setActiveFlag();
     detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => {});
     return true;
   }
@@ -277,6 +290,7 @@ export class CDPClient {
     this._bridgeDetected = false;
     this._bridgeVersion = null;
     this._connectedTarget = null;
+    this.clearActiveFlag();
     this.stopBackgroundPoll();
 
     if (this.ws) {
@@ -546,6 +560,7 @@ export class CDPClient {
     }
 
     this._helpersInjected = true;
+    this.setActiveFlag();
     detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => {});
 
     if (this._networkMode === 'none') {
@@ -682,6 +697,7 @@ export class CDPClient {
     }
     this.reconnecting = false;
     this._state = 'disconnected';
+    this.clearActiveFlag();
     console.error('CDP: reconnect failed after ' + RECONNECT_ATTEMPTS + ' attempts. Starting background poll...');
     this.startBackgroundPoll();
   }
