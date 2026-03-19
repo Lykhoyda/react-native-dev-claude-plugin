@@ -575,3 +575,33 @@ so important tasks are always visible first.
 - testIDs: `onboarding-screen`, `onboarding-page-{n}`, `onboarding-skip`, `onboarding-next`, `onboarding-done`, `onboarding-dots`
 
 **Plugin stress test:** Moti wraps Reanimated with declarative animations. Tests whether the plugin can detect animation completion states. 4-page pager tests navigation state within a single screen (no React Navigation). First story with onboarding/first-launch verification.
+
+---
+
+## S22: UI Styling Polish `[DONE]`
+
+**As a user**, I want polished tab bar icons and modern styling across the app.
+
+**Implemented:** Ionicons on all 4 tabs (filled/outline), `borderCurve: 'continuous'` + `boxShadow` on HomeScreen cards, `boxShadow` replacing legacy shadow props on FAB.
+
+**Rules exercised:** [RN-9.2] modern styling. **Benchmark:** 14 min. **Pass 4:** 5 pre-existing issues found.
+
+---
+
+## S23: Global Search Screen `[DONE]`
+
+**As a user**, I want to search across tasks, notifications, and feed from a single search screen.
+
+**Implemented:** Modal screen with FlashList + `getItemType` for heterogeneous results, HighlightedText component, debounced cross-store search (Redux + React Query cache), section headers with category badges.
+
+**Rules exercised:** [RN-2.6], [RN-2.8], [RN-2.2], [RN-2.1], [RN-9.8], [RN-6.1]. **Bug discovered:** B75 (modal→nested tab navigation). **Pass 4:** 3 new issues caught and fixed.
+
+---
+
+## S24: Animated Task Stats Card `[DONE]`
+
+**As a user**, I want a real-time task statistics card on the HomeScreen with animated progress bar.
+
+**Implemented:** TaskStatsCard with Reanimated shared values, staggered FadeInDown entries, GPU-accelerated progress bar via `transform: [{ scaleX }]`, priority distribution dots. Memoized selectors `selectTaskStats` + `selectPriorityDistribution`.
+
+**Rules exercised:** [RN-3.1] GPU properties, [RN-7.1] state as ground truth, [RN-6.1] minimize state. **Benchmark:** 15 min. **Pass 4:** 3 issues caught and fixed (withTiming in worklet, stable ref in deps, hoisted FEATURES array).

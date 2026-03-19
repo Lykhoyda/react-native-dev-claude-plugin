@@ -1395,10 +1395,41 @@ Split MCP server into a stable supervisor process + restartable CDP worker. When
 
 ---
 
-## Phase 41: App-Side Dev Bridge (Planned)
+## Phase 41: App-Side Dev Bridge (DONE)
 
-**Status:** Planned — highest priority from Gemini+Codex review
-**Impact:** Eliminates fiber walk fragility, enables OS API access, fixes nested navigation
+**Status:** Complete — 2026-03-18
+**Impact:** Eliminates fiber walk fragility for 5 capabilities via stable public APIs
+**Decisions:** D349–D352
+
+### What Was Built
+
+New npm package `@rn-dev-agent/runtime` (`packages/runtime/`) — a side-effectful import that registers `globalThis.__RN_DEV_BRIDGE__` with stable APIs for navigation state, store state, Redux dispatch, console capture, and error tracking. The MCP server detects the bridge and routes 5 tool handlers through it when available, falling back to injected helpers for `getTree`/`interact`.
+
+### Key Capabilities Replaced
+
+| Capability | Before (fiber walk) | After (bridge) |
+|-----------|-------------------|----------------|
+| Navigation state | Walk fiber to find NavigationContainer memoizedState | `navRef.getRootState()` — public API |
+| Store state | Walk fiber to find Provider/QueryClientProvider | Explicit `registerStore()` — zero fiber walk |
+| Redux dispatch | Walk fiber to find store | Explicit `registerStore()` with dispatch |
+| Console capture | Patched only after CDP connects — early logs lost | Patched at app startup — captures everything |
+| Error tracking | Hooked after CDP connects — early crashes lost | Hooked at app startup — captures everything |
+
+### What Stays in Injected Helpers (v1)
+- `cdp_component_tree` — fiber tree walker (most valuable via fiber)
+- `cdp_interact` — testID fiber lookup
+- `cdp_component_state` — hook state inspection
+
+### Files Created
+- `packages/runtime/src/` — 8 TypeScript files (bridge, nav, store, console, errors, types, utils, index)
+- `scripts/cdp-bridge/src/bridge-detector.ts` — MCP server bridge detection
+
+### Review Fixes (Gemini + Codex)
+- Console: MCP tool handles both array and `{ entries }` response shapes
+- Bridge detector validates required methods before setting `bridgeDetected`
+- Reconnect resets bridge state in `handleClose` + `softReconnect`
+- Store auto-detection re-scans globals on every call (not one-shot)
+- Console patch uses global sentinel to prevent double-wrapping on Fast Refresh
 
 ---
 
@@ -1409,10 +1440,16 @@ Split MCP server into a stable supervisor process + restartable CDP worker. When
 
 ---
 
-## Phase 43: MCP Server Supervisor (Planned)
+## Phase 43: MCP Server Resilience (DONE)
 
-**Status:** Planned — fixes B73 (MCP death on Metro restart)
-**Impact:** Production reliability for real-world development loops
+**Status:** Complete — 2026-03-18
+**Impact:** Auto-recovery from Metro restarts — no manual intervention needed
+**Decisions:** D347–D348
+
+### What Was Built
+- Reconnect window: 10→30 attempts, 1s→1.5s interval (~46s total coverage)
+- Background Metro poll: 5s interval checks Metro health after reconnect window expires, auto-triggers reconnect when Metro comes back
+- Improved error messages: suggest `cdp_status` when auto-connect fails
 
 ---
 
@@ -1511,7 +1548,7 @@ New `rn-best-practices` skill containing all 36 Vercel React Native rules (MIT l
 
 ---
 
-*Last updated: 2026-03-17 — 46 phases (45 done), 22 tools, 21 stories, 11 libraries, 4 skills, 36 best-practice rules*
+*Last updated: 2026-03-19 — 46 phases (41,43,45 done), 22 tools, 24 stories, 11 libraries, 4 skills, 39 best-practice rules, 1 runtime package*
 
 A local-only self-improvement system that captures failure patterns, classifies them, distills heuristics, and promotes validated learnings into the agent's active context. Inspired by Voyager (skill library), Reflexion (episodic memory), and DSPy (metric-driven optimization).
 
