@@ -12,6 +12,9 @@ From inside Claude Code, run these commands:
 
 # 2. Install the plugin
 /plugin install rn-dev-agent@Lykhoyda-react-native-dev-claude-plugin
+
+# 3. Reload plugins to activate
+/reload-plugins
 ```
 
 Or use the interactive UI:
