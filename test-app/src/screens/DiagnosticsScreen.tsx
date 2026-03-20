@@ -27,7 +27,7 @@ function generateDiagnosticLogs(): void {
   console.log('[Diagnostics] Screen mounted — generating sample log entries');
   console.info('[Diagnostics] App version: 1.0.0, RN: 0.81.5, Expo: 54');
   console.warn('[Diagnostics] Memory usage approaching threshold (simulated)');
-  console.error('[Diagnostics] Failed to connect to analytics service (simulated)');
+  console.warn('[Diagnostics] Failed to connect to analytics service (simulated)');
   console.log('[Diagnostics] Redux store has 4 slices, 1 Zustand store registered');
   console.info('[Diagnostics] Network: online, Metro: connected');
   console.warn('[Diagnostics] Bundle size exceeds recommended 5MB limit (simulated)');
@@ -84,7 +84,7 @@ export default function DiagnosticsScreen() {
       { id: '1', level: 'log', text: '[Diagnostics] Screen mounted — generating sample log entries', timestamp: new Date(now.getTime() - 7000).toISOString() },
       { id: '2', level: 'info', text: '[Diagnostics] App version: 1.0.0, RN: 0.81.5, Expo: 54', timestamp: new Date(now.getTime() - 6000).toISOString() },
       { id: '3', level: 'warn', text: '[Diagnostics] Memory usage approaching threshold (simulated)', timestamp: new Date(now.getTime() - 5000).toISOString() },
-      { id: '4', level: 'error', text: '[Diagnostics] Failed to connect to analytics service (simulated)', timestamp: new Date(now.getTime() - 4000).toISOString() },
+      { id: '4', level: 'warn', text: '[Diagnostics] Failed to connect to analytics service (simulated)', timestamp: new Date(now.getTime() - 4000).toISOString() },
       { id: '5', level: 'log', text: '[Diagnostics] Redux store has 4 slices, 1 Zustand store registered', timestamp: new Date(now.getTime() - 3000).toISOString() },
       { id: '6', level: 'info', text: '[Diagnostics] Network: online, Metro: connected', timestamp: new Date(now.getTime() - 2000).toISOString() },
       { id: '7', level: 'warn', text: '[Diagnostics] Bundle size exceeds recommended 5MB limit (simulated)', timestamp: new Date(now.getTime() - 1000).toISOString() },
