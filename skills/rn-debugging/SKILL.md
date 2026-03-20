@@ -16,7 +16,8 @@ native device logs, and bash tools.
 |----------------------|------|--------------------|
 | Is Metro running? | MCP | `cdp_status` |
 | Is app showing a crash (JS)? | MCP | `cdp_error_log` |
-| Is app showing a crash (native)? | bash | `adb logcat -b crash` / `xcrun simctl spawn booted log stream` |
+| Is app showing a crash (native)? | MCP | `collect_logs(sources=["native_ios"])` or `collect_logs(sources=["native_android"])` |
+| Unified JS + native logs? | MCP | `collect_logs(sources=["js_console","native_ios"], durationMs=3000)` |
 | What screen is the user on? | MCP | `cdp_navigation_state` |
 | What does the component render? | MCP | `cdp_component_tree(filter="MyComponent")` |
 | What is in the store? | MCP | `cdp_store_state(path="cart.items")` |
@@ -47,9 +48,9 @@ problem is native. CDP only sees JavaScript — check native logs as fallback.
 | Uncaught error overlay (RedBox) | `cdp_component_tree` (APP_HAS_REDBOX warning) | MCP |
 | `console.error()` call | `cdp_console_log(level="error")` | MCP |
 | Metro bundle syntax error | `curl localhost:8081/status` | bash |
-| Native crash (iOS) | `xcrun simctl spawn booted log stream --predicate 'processImagePath ENDSWITH "/YourApp" AND logType == error'` | bash |
-| Native crash (Android) | `adb logcat -b crash` | bash |
-| RN framework error (Android) | `adb logcat -s ReactNative:E ReactNativeJS:E --pid=$(adb shell pidof com.example.app \| awk '{print $1}')` | bash |
+| Native crash (iOS) | `collect_logs(sources=["native_ios"], logLevel="error")` | MCP |
+| Native crash (Android) | `collect_logs(sources=["native_android"], logLevel="error")` | MCP |
+| Cross-layer crash diagnosis | `collect_logs(sources=["js_console","native_ios"], durationMs=3000, logLevel="error")` | MCP |
 | Network failure | `cdp_network_log` (look for status=0 or missing status) | MCP |
 
 **Note:** Replace `"/YourApp"` with the actual binary name and `com.example.app`

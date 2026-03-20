@@ -1173,3 +1173,21 @@ RN 0.81.5+ Bridgeless targets put "React Native" in the CDP target's `descriptio
 
 ### D356: Gate health check on active CDP session via flag file
 The post-edit health check hook fired on every code edit in RN projects, even when rn-dev-agent wasn't being used. Now the CDP bridge writes `/tmp/rn-dev-agent-cdp-active` on successful connection and removes it on disconnect/reconnect failure. The hook checks for this flag first — no active CDP session means no health check.
+
+### D357: collect_logs — single-file architecture over modular collectors
+The spec proposed 6 files under `log-collectors/` with factory/composite/interface pattern. Chose a single `tools/collect-logs.ts` with three private functions instead. The collectors are ~30 lines each — splitting into modules adds indirection with no testability benefit at current scale.
+
+### D358: collect_logs — unprefixed tool name
+Named `collect_logs` instead of `cdp_collect_logs` or `device_collect_logs` because it spans both layers (JS console via CDP + native iOS/Android via subprocess). Neither prefix is accurate.
+
+### D359: collect_logs — always use tag filter for Android logcat
+Removed broken `resolveAndroidPid` (passed literal `'com.'` to `pidof`). Always filter by `-s ReactNative:V ReactNativeJS:V` tags. Tag filtering is sufficient for RN debugging.
+
+### D360: collect_logs — normalize timestamps to millisecond precision
+iOS ndjson emits 6-digit fractional seconds, Android logcat has 3-digit, JS uses `toISOString()` (3-digit). All normalized through `new Date(ts).toISOString()` for consistent cross-source sorting.
+
+### D361: Skip image optimization from Phase 9
+Screenshot optimization (jimp-compact) not needed — agent-device already produces reasonable sizes. Removed from scope.
+
+### D356: Gate health check on active CDP session via flag file
+The post-edit health check hook fired on every code edit in RN projects, even when rn-dev-agent wasn't being used. Now the CDP bridge writes `/tmp/rn-dev-agent-cdp-active` on successful connection and removes it on disconnect/reconnect failure. The hook checks for this flag first — no active CDP session means no health check.

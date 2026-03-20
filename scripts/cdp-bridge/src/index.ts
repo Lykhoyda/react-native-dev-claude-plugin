@@ -15,6 +15,7 @@ import { createStoreStateHandler } from './tools/store-state.js';
 import { createDispatchHandler } from './tools/dispatch.js';
 import { createDevSettingsHandler } from './tools/dev-settings.js';
 import { createInteractHandler } from './tools/interact.js';
+import { createCollectLogsHandler } from './tools/collect-logs.js';
 import { createDeviceListHandler, createDeviceScreenshotHandler } from './tools/device-list.js';
 import { createDeviceSnapshotHandler } from './tools/device-session.js';
 import { createDeviceFindHandler, createDevicePressHandler, createDeviceFillHandler, createDeviceSwipeHandler, createDeviceBackHandler } from './tools/device-interact.js';
@@ -192,6 +193,23 @@ server.tool(
     animated: z.boolean().default(true).describe('For scroll: whether to animate'),
   },
   createInteractHandler(getClient),
+);
+
+server.tool(
+  'collect_logs',
+  'Collect logs from multiple sources in parallel: JS console (Hermes ring buffer snapshot), native iOS (xcrun simctl log stream), native Android (adb logcat). Results merged and sorted by timestamp. Works without CDP when only native sources requested. Use when debugging crashes that span JS and native layers.',
+  {
+    sources: z.array(z.enum(['js_console', 'native_ios', 'native_android']))
+      .default(['js_console'])
+      .describe('Log sources to collect from (default: js_console only)'),
+    durationMs: z.number().int().min(0).max(10000).default(2000)
+      .describe('How long to stream native logs in ms (default 2000). JS console is a snapshot — durationMs only applies to native sources.'),
+    filter: z.string().optional()
+      .describe('Substring filter applied to log text after collection'),
+    logLevel: z.enum(['all', 'log', 'warn', 'error', 'info', 'debug']).default('all')
+      .describe('Filter by log level (default: all)'),
+  },
+  createCollectLogsHandler(getClient),
 );
 
 // --- agent-device tools (native device interaction) ---

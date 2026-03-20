@@ -329,22 +329,20 @@ Plugin manifests also corrected to match Claude Code schema (D112).
 
 ---
 
-## Phase 9: expo-mcp Patterns Port (2026-03-11)
+## Phase 9: expo-mcp Patterns Port (DONE)
 
-**Status: Spec & Plan Complete — Implementation Pending**
+**Status:** Complete — 2026-03-19
+**Decisions:** D357-D361
 
-Porting proven patterns from [expo/expo-mcp](https://github.com/expo/expo-mcp) into the plugin:
+Ported multi-source log collection from expo-mcp. Native device automation tools (automation_tap/find/screenshot) superseded by agent-device. Image optimization skipped (D361).
 
 | Capability | Tools | Status |
 |-----------|-------|--------|
-| Native device automation (XCTest iOS + ADB Android) | `automation_tap`, `automation_find`, `automation_screenshot` | Planned |
-| Multi-source log collection with factory pattern | `collect_logs` | Planned |
-| Image optimization pipeline (jimp-compact, 700KB target) | Internal utility | Planned |
+| Native device automation | Superseded by `device_press`, `device_find`, `device_screenshot` (agent-device) | Skipped |
+| Multi-source log collection | `collect_logs` | **Done** |
+| Image optimization pipeline | Skipped (agent-device screenshots already reasonable) | Skipped (D361) |
 
-Design spec: `docs/superpowers/specs/2026-03-10-expo-mcp-patterns-port-design.md`
-Implementation plan: `docs/superpowers/plans/2026-03-10-expo-mcp-patterns-port.md`
-
-Codex review completed and all issues fixed in spec/plan (D113-D124).
+New tool: `collect_logs(sources, durationMs, filter?, logLevel?)` — collects JS console (Hermes evaluate), native iOS (`xcrun simctl log stream --style ndjson`), native Android (`adb logcat -v threadtime`) in parallel via `Promise.allSettled`. Merges by normalized ISO timestamp. Works without CDP when only native sources requested.
 
 ---
 
@@ -1548,7 +1546,17 @@ New `rn-best-practices` skill containing all 36 Vercel React Native rules (MIT l
 
 ---
 
-*Last updated: 2026-03-19 — 46 phases (41,43,45 done), 22 tools, 24 stories, 11 libraries, 4 skills, 39 best-practice rules, 1 runtime package, auto-update guide*
+---
+
+## Future Ideas (Backlog)
+
+### Network Enrichment + Mocking (mitmproxy)
+**Status:** Idea — parked for now
+Two-layer approach: (1) enhance injected fetch/XHR hooks to capture headers + bodies on-demand via new `cdp_network_detail` tool, (2) optional mitmproxy integration for request mocking (custom rules + scenario presets like "offline mode", "slow 3G", "auth expired", "500 errors") and native-level traffic capture. mitmproxy auto-installed via `ensure-mitmproxy.sh`, cert auto-trusted on simulator. Progressive enhancement — layer 1 works without proxy, layer 2 lights up when detected.
+
+---
+
+*Last updated: 2026-03-19 — 46 phases (9,41,43,45 done), 23 tools, 24 stories, 11 libraries, 4 skills, 39 best-practice rules, 1 runtime package*
 
 A local-only self-improvement system that captures failure patterns, classifies them, distills heuristics, and promotes validated learnings into the agent's active context. Inspired by Voyager (skill library), Reflexion (episodic memory), and DSPy (metric-driven optimization).
 
