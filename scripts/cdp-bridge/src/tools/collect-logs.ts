@@ -46,11 +46,11 @@ async function collectJsConsole(
     let parsed: unknown;
     try { parsed = JSON.parse(result.value); } catch { return []; }
 
-    let raw: Array<{ level?: string; text?: string; timestamp?: string }>;
+    let raw: Array<{ level?: string; text?: string; message?: string; timestamp?: string | number }>;
     if (Array.isArray(parsed)) {
       raw = parsed;
     } else if (parsed && typeof parsed === 'object' && 'entries' in parsed && Array.isArray((parsed as { entries: unknown[] }).entries)) {
-      raw = (parsed as { entries: Array<{ level?: string; text?: string; timestamp?: string }> }).entries;
+      raw = (parsed as { entries: typeof raw }).entries;
     } else {
       return [];
     }
@@ -58,8 +58,8 @@ async function collectJsConsole(
     return raw.map(e => ({
       source: 'js_console' as const,
       level: e.level ?? 'log',
-      text: e.text ?? '',
-      timestamp: normalizeTimestamp(e.timestamp),
+      text: e.message ?? e.text ?? '',
+      timestamp: normalizeTimestamp(typeof e.timestamp === 'number' ? new Date(e.timestamp).toISOString() : e.timestamp),
     }));
   } catch {
     return [];

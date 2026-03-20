@@ -38,8 +38,8 @@ async function collectJsConsole(client, level, limit) {
         return raw.map(e => ({
             source: 'js_console',
             level: e.level ?? 'log',
-            text: e.text ?? '',
-            timestamp: normalizeTimestamp(e.timestamp),
+            text: e.message ?? e.text ?? '',
+            timestamp: normalizeTimestamp(typeof e.timestamp === 'number' ? new Date(e.timestamp).toISOString() : e.timestamp),
         }));
     }
     catch {
