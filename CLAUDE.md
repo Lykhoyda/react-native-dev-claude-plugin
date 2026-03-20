@@ -125,13 +125,6 @@ rn-dev-agent/
 - Component tree filter is mandatory — full dumps waste 10K+ tokens
 - Architect (Opus) designs E2E proof flows during Phase 4; Phase 8 executes mechanically
 
-## Documentation
-
-Local-only (gitignored, not in repo):
-- `docs/ROADMAP.md` — Phase-by-phase implementation plan (Phases 1-33)
-- `docs/DECISIONS.md` — Architectural decision records (D1-D280)
-- `docs/BUGS.md` — Known issues and workarounds
-
 ## Conventions
 
 - CDP bridge is TypeScript (Node.js >= 22, LTS versions recommended)

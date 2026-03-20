@@ -1,8 +1,0 @@
-appId: host.exp.Exponent
----
-- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-      - waitForAnimationToEnd
