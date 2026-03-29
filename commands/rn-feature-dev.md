@@ -365,6 +365,22 @@ mkdir -p docs/proof/<feature-slug>
 
 Use the feature slug from Phase 1 (e.g., `s4-notification-snooze`, `profile-edit-modal`).
 
+### Step 1.5: Start video recording
+
+Detect the active platform and start a background video recording. This captures
+the entire proof flow as a video for the PR.
+
+```bash
+# Detect platform
+PLATFORM="ios"  # or "android" based on booted devices
+
+# Start recording
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start $PLATFORM docs/proof/<feature-slug>/flow-$PLATFORM.mov
+```
+
+If recording fails to start (no simulator, permissions), log a warning and
+continue — video is a nice-to-have, not a gate. Screenshots remain primary.
+
 ### Step 2: Execute the E2E Proof Flow from the blueprint
 
 Read the **E2E Proof Flow** table from the Phase 4 blueprint. For each row
@@ -397,6 +413,24 @@ in the table, execute in order:
 
 Execute ALL rows in the table. Do not stop early or skip "optional" steps —
 the architect included them for a reason.
+
+### Step 2.5: Stop recording and convert
+
+Stop the background video recording:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh stop
+```
+
+Attempt GIF conversion for inline PR display:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif \
+  docs/proof/<feature-slug>/flow-$PLATFORM.mov \
+  docs/proof/<feature-slug>/flow-$PLATFORM.gif
+```
+
+If ffmpeg is not available, skip GIF conversion — the raw .mov is still useful.
 
 ### Step 3: Write PROOF.md
 
@@ -435,16 +469,46 @@ matched the architect's E2E Proof Flow."
 - `03-result.jpg` — <description>
 ```
 
-### Step 4: Mark complete
+### Step 4: Validate proof artifacts (CRITICAL)
+
+**Before presenting proof to the user, verify the recording and screenshots
+actually show the expected feature.** This prevents presenting invalid proof.
+
+Validation checklist:
+1. **Video file exists and has reasonable size** (> 10KB):
+   ```bash
+   ls -la docs/proof/<feature-slug>/flow-*.mov docs/proof/<feature-slug>/flow-*.mp4 2>/dev/null
+   ```
+2. **Final screenshot shows the expected end state** — verify via
+   `cdp_component_tree` or `cdp_navigation_state` that the app is on the
+   expected screen with expected data visible.
+3. **No errors during recording** — call `cdp_error_log` and confirm no
+   new errors appeared during the proof flow.
+4. **All numbered screenshots exist** with non-zero size.
+
+If validation fails: report what went wrong and ask the user if they want
+to re-record. Do NOT present invalid proof as complete.
+
+### Step 5: Generate PR body
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/generate_pr_body.sh docs/proof/<feature-slug>/
+```
+
+This produces `docs/proof/<feature-slug>/PR-BODY.md` — a ready-to-paste PR
+description with embedded screenshots, video upload placeholders, device
+info, and a files-changed summary.
+
+### Step 6: Mark complete
 
 Mark all todos complete. The feature is done — implemented, verified, reviewed,
-and proven with screenshots.
+and proven with screenshots and video.
 
 **Gate**: PROOF.md exists, contains screenshots for ALL steps in the architect's
-E2E Proof Flow, and all state assertions match. If screenshot capture fails
-(e.g., no simulator), log the failure in PROOF.md and note it in the Phase 7
-summary. If a state assertion doesn't match, this is a bug — fix it before
-completing.
+E2E Proof Flow, all state assertions match, and PR-BODY.md is generated.
+If screenshot capture fails (e.g., no simulator), log the failure in PROOF.md
+and note it in the Phase 7 summary. If a state assertion doesn't match,
+this is a bug — fix it before completing.
 
 ---
 

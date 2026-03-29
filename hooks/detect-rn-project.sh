@@ -37,6 +37,9 @@ if [ "$has_rn_config" = true ]; then
   # Ensure agent-device is installed (silent if already present)
   bash "$PLUGIN_ROOT/scripts/ensure-agent-device.sh" 2>/dev/null || true
 
+  # Ensure ffmpeg for video-to-GIF conversion (silent if already present)
+  bash "$PLUGIN_ROOT/scripts/ensure-ffmpeg.sh" 2>/dev/null || true
+
   cat <<'EOF'
 React Native project detected. The rn-dev-agent plugin is active.
 
@@ -46,6 +49,7 @@ Available commands:
   /rn-dev-agent:debug-screen                - Diagnose and fix the current screen
   /rn-dev-agent:check-env                   - Verify environment is ready
   /rn-dev-agent:rn-feature-dev <description> - Guided feature development (explore, design, implement, verify)
+  /rn-dev-agent:proof-capture <slug>        - Capture PR proof (video + screenshots + PR body)
 
 Use build-and-test if the app isn't installed yet. Metro starts automatically.
 EOF

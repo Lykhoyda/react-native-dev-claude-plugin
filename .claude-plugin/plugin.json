@@ -37,7 +37,8 @@
     "./commands/debug-screen.md",
     "./commands/check-env.md",
     "./commands/build-and-test.md",
-    "./commands/rn-feature-dev.md"
+    "./commands/rn-feature-dev.md",
+    "./commands/proof-capture.md"
   ],
   "mcpServers": {
     "rn-dev-agent-cdp": {
