@@ -518,6 +518,17 @@ this is a bug — fix it before completing.
 - Metro dev server running (`npx expo start` or `npx react-native start`)
 - For Zustand apps: `if (__DEV__) global.__ZUSTAND_STORES__ = { ... }` in app entry
 
+## Safety Constraints (GH #5)
+
+- **NEVER launch parallel agents targeting the same device.** Multiple agents
+  competing for one simulator causes cascading failures (app data cleared,
+  Metro restarted on wrong branch, screenshot races). Use sequential testing
+  or separate devices.
+- **NEVER change git state** from agents — no `git checkout`, `git stash`,
+  `git reset`. Agents read and verify, they don't manage branches.
+- **Retry budget**: All agents follow a max-3-retries-per-action-type rule.
+  After 3 failures, they stop and report the blocker.
+
 ## Recovery Procedures
 
 - **Simulator not running**: Auto-recovery via `expo_ensure_running.sh` is

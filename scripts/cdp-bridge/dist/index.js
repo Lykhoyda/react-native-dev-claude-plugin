@@ -19,6 +19,7 @@ import { createCollectLogsHandler } from './tools/collect-logs.js';
 import { createDeviceListHandler, createDeviceScreenshotHandler } from './tools/device-list.js';
 import { createDeviceSnapshotHandler } from './tools/device-session.js';
 import { createDeviceFindHandler, createDevicePressHandler, createDeviceFillHandler, createDeviceSwipeHandler, createDeviceBackHandler } from './tools/device-interact.js';
+import { createDevicePermissionHandler } from './tools/device-permission.js';
 let client = new CDPClient();
 const getClient = () => client;
 const setClient = (c) => { client = c; };
@@ -160,6 +161,12 @@ server.tool('device_swipe', 'Swipe on the device screen. Use for scrolling, pull
     direction: z.enum(['up', 'down', 'left', 'right']).describe('Swipe direction'),
 }, createDeviceSwipeHandler());
 server.tool('device_back', 'Press the system back button (Android) or perform back navigation gesture (iOS). Requires an open session.', {}, createDeviceBackHandler());
+server.tool('device_permission', 'Grant, revoke, or reset app permissions on simulator/emulator. Uses xcrun simctl privacy (iOS) and adb shell pm (Android). Useful for testing permission-gated flows like notifications, camera, location.', {
+    action: z.enum(['grant', 'revoke', 'reset']).describe('grant: allow permission. revoke: deny permission. reset: restore to default (ask-again state).'),
+    permission: z.string().describe('Permission key: notifications, camera, microphone, location, location-always, photos, contacts, calendar, reminders, storage, all'),
+    appId: z.string().describe('App bundle ID (e.g. "com.example.app")'),
+    platform: z.string().optional().describe('Force platform: "ios" or "android". Auto-detected if omitted.'),
+}, createDevicePermissionHandler());
 process.on('uncaughtException', (err) => {
     console.error('MCP server uncaught exception:', err.message);
     process.exit(1);

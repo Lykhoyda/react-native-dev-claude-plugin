@@ -172,6 +172,38 @@ Summarize:
 - Steps that failed (with screenshot + state dump)
 - Maestro test file generated at: flows/<name>.yaml
 
+## Circuit Breaker — Retry Budget (GH #5)
+
+**You MUST track failures by category. After 3 failures of the same type, STOP.**
+
+| Category | Example failures | After 3 failures |
+|----------|-----------------|-------------------|
+| Screenshot | simctl screenshot fails, blank image | STOP — report "simulator may be unresponsive" |
+| Device interaction | device_find/press fails, element not found | STOP — report which element and ask user |
+| CDP query | cdp_status/component_tree/store_state errors | STOP — report "CDP connection lost" |
+| App launch | app crashes on launch, RedBox persists | STOP — report the error and suggest rebuild |
+| Maestro flow | flow fails to execute | STOP — report flow error output |
+
+When you hit the budget:
+1. Report exactly what failed 3 times
+2. Report what you were trying to test
+3. Suggest a concrete fix (rebuild, restart Metro, fix source code)
+4. **Do NOT spawn background tasks to retry. Do NOT try alternative approaches endlessly.**
+
+## Safety Constraints
+
+1. **NEVER change git state**: Do not run `git checkout`, `git stash`,
+   `git reset`, `git branch -D`, `git clean`, or any command that changes
+   branches, discards work, or modifies the working tree. You are a testing
+   agent — you read and verify, you don't manage source control.
+
+2. **NEVER clear app data** (`adb shell pm clear`, `xcrun simctl erase`)
+   unless explicitly asked. Clearing state can break the Dev Client Metro
+   connection and cause cascading failures.
+
+3. **Single device**: If multiple simulators/emulators are running, pick
+   ONE and use it consistently. Do not switch devices mid-test.
+
 ## Critical Rules
 
 1. **Scoped tree queries**: NEVER call cdp_component_tree without a
@@ -198,6 +230,16 @@ Summarize:
 6. **After code changes**: Wait for Fast Refresh before testing.
    Hot reload is automatic when Claude Code saves a file. Wait 1-2s
    or call cdp_reload if needed.
+
+7. **Binary mismatch detection** (GH #5): If you see RedBox errors about
+   missing native modules (e.g. "TurboModuleRegistry: module not found",
+   "Invariant: native module cannot be null"), this usually means the
+   installed binary was built with a different Expo SDK or RN version
+   than Metro is serving. **Do NOT retry or clear app data.** Instead:
+   - Report: "Binary mismatch — the installed app was built with a
+     different SDK version than Metro is serving."
+   - Suggest: "Rebuild with `npx expo run:ios` or `npx expo run:android`"
+   - STOP testing — retries will not fix a binary mismatch.
 
 ## Verification Checkpoint
 
