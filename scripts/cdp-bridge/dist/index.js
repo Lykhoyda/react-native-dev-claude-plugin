@@ -116,8 +116,8 @@ trackedTool('cdp_dispatch', 'Dispatch a Redux action and optionally read state a
     payload: z.any().optional().describe('Action payload'),
     readPath: z.string().optional().describe('Dot-path to read from store after dispatch (e.g. "tasks.pendingDelete")'),
 }, createDispatchHandler(getClient));
-trackedTool('cdp_dev_settings', 'Control React Native dev settings programmatically (no visual dev menu needed). dismissRedBox clears LogBox overlays and RedBox errors via a 4-tier fallback chain. For reload with auto-reconnect, use cdp_reload instead.', {
-    action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox'])
+trackedTool('cdp_dev_settings', 'Control React Native dev settings programmatically (no visual dev menu needed). dismissRedBox clears LogBox overlays and RedBox errors via a 4-tier fallback chain. disableDevMenu suppresses shake-to-show dev menu (use before proof recordings). For reload with auto-reconnect, use cdp_reload instead.', {
+    action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox', 'disableDevMenu'])
         .describe('Dev menu action to execute'),
 }, createDevSettingsHandler(getClient));
 trackedTool('cdp_interact', 'Interact with React components by testID — press buttons, type text, scroll. Calls JS handlers directly (not native touch). Reliable for all React-level interactions. For native gestures (swipe, drag), use device_swipe/device_press instead.', {

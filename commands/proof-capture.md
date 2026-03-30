@@ -30,7 +30,16 @@ mkdir -p docs/proof/<feature-slug>
 ### Step 2: Environment check
 
 Call `cdp_status` to confirm the app is running and CDP is connected.
-Take a baseline screenshot to confirm the starting screen.
+
+**Pre-recording readiness check (GH #8):**
+1. Call `cdp_navigation_state` — verify it returns a valid route name
+   (not empty, not "DevClientLauncher", not "ServerPicker"). If the app
+   is stuck on the Dev Client picker, ask the user to select the Metro
+   server manually, then retry.
+2. Call `cdp_dev_settings(action="disableDevMenu")` — suppress the shake-to-show
+   dev menu so it doesn't pop up during recording and ruin the video.
+3. Take a baseline screenshot to confirm the starting screen is the actual
+   app, not a system dialog or dev client picker.
 
 ### Step 3: Start recording
 

@@ -208,6 +208,11 @@ When you hit the budget:
    unless explicitly asked. Clearing state can break the Dev Client Metro
    connection and cause cascading failures.
 
+4. **NEVER use `clearState: true`** in Maestro flows targeting Expo Dev Client
+   builds (GH #8). It wipes the stored Metro server URL, causing the Dev
+   Client picker to appear instead of the app. Use `launchApp` without
+   clearState, or use `clearKeychain`/`clearNotifications` for targeted resets.
+
 3. **Single device**: If multiple simulators/emulators are running, pick
    ONE and use it consistently. Do not switch devices mid-test.
 

@@ -1,7 +1,7 @@
 import type { CDPClient } from '../cdp-client.js';
 import { okResult, failResult, warnResult, withConnection } from '../utils.js';
 
-type DevAction = 'reload' | 'toggleInspector' | 'togglePerfMonitor' | 'dismissRedBox';
+type DevAction = 'reload' | 'toggleInspector' | 'togglePerfMonitor' | 'dismissRedBox' | 'disableDevMenu';
 
 const RESOLVE_DEV_SETTINGS = `(function() {
   if (typeof __turboModuleProxy === 'function') try { var ds = __turboModuleProxy("DevSettings"); if (ds) return ds; } catch(e) {}
@@ -15,6 +15,23 @@ const ACTION_EXPRESSIONS: Record<DevAction, string> = {
   reload: `(function() { var ds = ${RESOLVE_DEV_SETTINGS}; if (!ds || !ds.reload) throw new Error("DevSettings not available"); ds.reload(); return "ok"; })()`,
   toggleInspector: `(function() { var ds = ${RESOLVE_DEV_SETTINGS}; if (!ds || !ds.toggleElementInspector) throw new Error("DevSettings not available"); ds.toggleElementInspector(); return "ok"; })()`,
   togglePerfMonitor: `(function() { var ds = ${RESOLVE_DEV_SETTINGS}; if (!ds) throw new Error("DevSettings not available"); if (ds.togglePerformanceMonitor) { ds.togglePerformanceMonitor(); } else if (ds.togglePerfMonitor) { ds.togglePerfMonitor(); } else { return "no_method_available"; } return "ok"; })()`,
+  disableDevMenu: `(function() {
+    try {
+      var ds = ${RESOLVE_DEV_SETTINGS};
+      if (ds && typeof ds.setIsShakeToShowDevMenuEnabled === 'function') {
+        ds.setIsShakeToShowDevMenuEnabled(false);
+        return "ok";
+      }
+    } catch(e) {}
+    try {
+      var ds2 = ${RESOLVE_DEV_SETTINGS};
+      if (ds2 && typeof ds2.setIsDebuggingRemotely === 'function') {
+        ds2.setIsDebuggingRemotely(false);
+      }
+      return "ok_partial";
+    } catch(e) {}
+    return "no_method_available";
+  })()`,
   dismissRedBox: `(function() {
     try { var ds = (typeof __turboModuleProxy === 'function') ? __turboModuleProxy("DevSettings") : null; if (ds && typeof ds.dismissRedbox === 'function') { ds.dismissRedbox(); return "ok"; } } catch(e0) {}
     try { var ds2 = require("react-native").DevSettings; if (ds2 && typeof ds2.dismissRedbox === 'function') { ds2.dismissRedbox(); return "ok"; } } catch(e0b) {}

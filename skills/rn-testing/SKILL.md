@@ -103,10 +103,14 @@ before querying CDP state, or call `cdp_reload` for a full reload.
 ```yaml
 appId: com.example.app
 ---
-- launchApp:
-    clearState: true
+- launchApp
 - assertVisible: "Home"
 ```
+
+**WARNING**: Never use `clearState: true` with Expo Dev Client builds — it wipes
+the stored Metro server URL, causing the Dev Client launcher/picker to appear
+instead of your app (EG_DEV_CLIENT_CLEARSTATE). Only use clearState with
+Expo Go or bare React Native apps.
 
 ### Navigation and Interaction
 
@@ -157,8 +161,7 @@ appId: com.example.app
 ```yaml
 appId: com.example.app
 ---
-- launchApp:
-    clearState: true
+- launchApp
 - assertVisible: "Home"
 - tapOn:
     id: "product-shoe-1"

@@ -182,9 +182,9 @@ trackedTool(
 
 trackedTool(
   'cdp_dev_settings',
-  'Control React Native dev settings programmatically (no visual dev menu needed). dismissRedBox clears LogBox overlays and RedBox errors via a 4-tier fallback chain. For reload with auto-reconnect, use cdp_reload instead.',
+  'Control React Native dev settings programmatically (no visual dev menu needed). dismissRedBox clears LogBox overlays and RedBox errors via a 4-tier fallback chain. disableDevMenu suppresses shake-to-show dev menu (use before proof recordings). For reload with auto-reconnect, use cdp_reload instead.',
   {
-    action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox'])
+    action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox', 'disableDevMenu'])
       .describe('Dev menu action to execute'),
   },
   createDevSettingsHandler(getClient),

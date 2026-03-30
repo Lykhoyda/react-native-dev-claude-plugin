@@ -365,10 +365,16 @@ mkdir -p docs/proof/<feature-slug>
 
 Use the feature slug from Phase 1 (e.g., `s4-notification-snooze`, `profile-edit-modal`).
 
-### Step 1.5: Start video recording
+### Step 1.5: Pre-recording setup and start video
 
-Detect the active platform and start a background video recording. This captures
-the entire proof flow as a video for the PR.
+**Pre-recording readiness (GH #8):**
+1. Call `cdp_navigation_state` — verify a valid route (not Dev Client picker).
+   If stuck on picker, ask the user to select the Metro server.
+2. Call `cdp_dev_settings(action="disableDevMenu")` — suppress dev menu popups
+   during recording.
+3. Take a baseline screenshot to confirm app is on an actual screen.
+
+Then start recording:
 
 ```bash
 # Detect platform

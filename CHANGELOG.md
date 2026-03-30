@@ -4,6 +4,16 @@ All notable changes to rn-dev-agent will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.2] — 2026-03-30
+
+### Added
+- **`disableDevMenu` action** for `cdp_dev_settings` (#8) — suppresses shake-to-show dev menu via `DevSettings.setIsShakeToShowDevMenuEnabled(false)`. Auto-called before proof recordings.
+- **Pre-recording readiness check** in proof-capture and rn-feature-dev Phase 8 (#8) — verifies valid navigation route (not Dev Client picker) and disables dev menu before recording starts.
+- **Dev Client clearState warning** in rn-testing skill (#8) — all Maestro YAML examples updated to not use `clearState:true`.
+
+### Changed
+- rn-tester agent Safety Constraints now explicitly forbid `clearState:true` with Dev Client builds.
+
 ## [0.7.1] — 2026-03-30
 
 ### Added
