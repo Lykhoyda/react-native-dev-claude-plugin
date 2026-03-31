@@ -104,7 +104,7 @@ if [[ "$ios_booted" == "true" ]]; then
   if [[ -f "$app_json" ]]; then
     bundle_id=$(jq -r '.expo.ios.bundleIdentifier // empty' "$app_json" 2>/dev/null)
     if [[ -n "$bundle_id" ]]; then
-      installed=$(xcrun simctl listapps booted 2>/dev/null | grep -c "$bundle_id" || echo "0")
+      installed=$(xcrun simctl listapps booted 2>/dev/null | grep -cF "\"$bundle_id\"" || echo "0")
       if [[ "$installed" == "0" ]]; then
         exit 0  # App not installed on simulator — skip
       fi
@@ -118,7 +118,7 @@ elif [[ "$android_booted" == "true" ]]; then
       android_pkg=$(jq -r '.android.package // empty' "$app_json" 2>/dev/null)
     fi
     if [[ -n "$android_pkg" ]]; then
-      installed=$(adb shell pm list packages 2>/dev/null | grep -c "$android_pkg" || echo "0")
+      installed=$(adb shell pm list packages 2>/dev/null | grep -cxF "package:$android_pkg" || echo "0")
       if [[ "$installed" == "0" ]]; then
         exit 0  # App not installed on emulator — skip
       fi

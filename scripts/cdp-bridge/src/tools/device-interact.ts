@@ -7,7 +7,7 @@ import { okResult, failResult } from '../utils.js';
 
 const execFile = promisify(execFileCb);
 
-const ANDROID_UNSAFE_CHARS = /[+@#$%^&*(){}|\\<>~`[\]]/;
+const ANDROID_UNSAFE_CHARS = /[+@#$%^&*(){}|\\<>~`[\]?*]/;
 const ANDROID_FILL_MAX_SAFE_LEN = 30;
 
 // --- Find ---
@@ -77,15 +77,23 @@ interface FillArgs {
   text: string;
 }
 
+function getAdbSerial(): string[] {
+  const session = getActiveSession();
+  if (session?.deviceId) return ['-s', session.deviceId];
+  if (process.env.ANDROID_SERIAL) return ['-s', process.env.ANDROID_SERIAL];
+  return [];
+}
+
 async function androidClipboardFill(text: string): Promise<ToolResult> {
   try {
+    const serial = getAdbSerial();
     const chunks = [];
     for (let i = 0; i < text.length; i += 10) {
       chunks.push(text.slice(i, i + 10));
     }
     for (const chunk of chunks) {
-      const adbEscaped = chunk.replace(/ /g, '%s').replace(/[&|;<>()$`\\!"']/g, (c) => `\\${c}`);
-      await execFile('adb', ['shell', 'input', 'text', adbEscaped], { timeout: 10000 });
+      const adbEscaped = chunk.replace(/ /g, '%s').replace(/[&|;<>()$`\\!"'*?[\]{}]/g, (c) => `\\${c}`);
+      await execFile('adb', [...serial, 'shell', 'input', 'text', adbEscaped], { timeout: 10000 });
     }
     return okResult({ filled: true, method: 'adb-chunked-input', length: text.length });
   } catch (err: unknown) {
@@ -96,7 +104,9 @@ async function androidClipboardFill(text: string): Promise<ToolResult> {
 
 function isAndroidSession(): boolean {
   const session = getActiveSession();
-  return session?.platform === 'android';
+  if (session?.platform === 'android') return true;
+  if (session?.platform) return false;
+  return !!process.env.ANDROID_SERIAL;
 }
 
 export function createDeviceFillHandler(): (args: FillArgs) => Promise<ToolResult> {

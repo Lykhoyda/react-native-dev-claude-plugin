@@ -34,11 +34,15 @@ if adb forward --list 2>/dev/null | grep -q "tcp:7001"; then
   adb forward --remove tcp:7001 2>/dev/null || true
 fi
 
-# 3. Set ANDROID_SERIAL if multiple devices
+# 3. Persist ANDROID_SERIAL for child processes (export alone doesn't propagate to parent)
+SERIAL_FILE="${TMPDIR:-/tmp}/rn-dev-agent-android-serial"
 device_count=$(adb devices 2>/dev/null | grep -c "device$" || echo "0")
 if [ "$device_count" -gt 1 ] && [ -z "${ANDROID_SERIAL:-}" ]; then
-  export ANDROID_SERIAL="$device_id"
+  echo "$device_id" > "$SERIAL_FILE"
   echo "Multiple Android devices detected. Auto-selected: $device_id"
+  echo "Persisted to $SERIAL_FILE for child processes."
+elif [ "$device_count" -eq 1 ]; then
+  echo "$device_id" > "$SERIAL_FILE"
 fi
 
 # 4. Check maestro-runner availability (required for Android — classic Maestro gRPC is unreliable)

@@ -23,13 +23,6 @@ const ACTION_EXPRESSIONS: Record<DevAction, string> = {
         return "ok";
       }
     } catch(e) {}
-    try {
-      var ds2 = ${RESOLVE_DEV_SETTINGS};
-      if (ds2 && typeof ds2.setIsDebuggingRemotely === 'function') {
-        ds2.setIsDebuggingRemotely(false);
-      }
-      return "ok_partial";
-    } catch(e) {}
     return "no_method_available";
   })()`,
   dismissRedBox: `(function() {

@@ -7,6 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODE_SCRIPT="$SCRIPT_DIR/dist/index.js"
 
 # Ensure Android SDK tools are in PATH (agent-device needs adb)
+# Honor ANDROID_SDK_ROOT (newer) over ANDROID_HOME (deprecated but still common)
+if [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -z "${ANDROID_HOME:-}" ]; then
+  export ANDROID_HOME="$ANDROID_SDK_ROOT"
+fi
 if [ -z "${ANDROID_HOME:-}" ]; then
   for candidate in "$HOME/Library/Android/sdk" "$HOME/Android/Sdk" "/opt/android-sdk"; do
     if [ -d "$candidate" ]; then
@@ -18,6 +22,13 @@ fi
 if [ -n "${ANDROID_HOME:-}" ]; then
   [[ ":$PATH:" != *":$ANDROID_HOME/platform-tools:"* ]] && export PATH="$ANDROID_HOME/platform-tools:$PATH"
   [[ ":$PATH:" != *":$ANDROID_HOME/emulator:"* ]] && export PATH="$ANDROID_HOME/emulator:$PATH"
+fi
+
+# Pick up ANDROID_SERIAL persisted by ensure-android-ready.sh (SessionStart hook)
+SERIAL_FILE="${TMPDIR:-/tmp}/rn-dev-agent-android-serial"
+if [ -z "${ANDROID_SERIAL:-}" ] && [ -f "$SERIAL_FILE" ]; then
+  export ANDROID_SERIAL
+  ANDROID_SERIAL="$(cat "$SERIAL_FILE")"
 fi
 
 # Ensure JDK is in PATH (needed for Gradle/Android builds)

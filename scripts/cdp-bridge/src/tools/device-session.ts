@@ -42,9 +42,15 @@ export function createDeviceSnapshotHandler(): (args: SnapshotArgs) => Promise<T
       const result = await runAgentDevice(cliArgs, { skipSession: true });
 
       if (!result.isError) {
+        let deviceId: string | undefined;
+        try {
+          const envelope = JSON.parse(result.content[0].text);
+          deviceId = envelope?.data?.deviceId ?? envelope?.data?.device?.id;
+        } catch { /* best-effort */ }
         setActiveSession({
           name: sessionName,
           platform: args.platform,
+          deviceId,
           openedAt: new Date().toISOString(),
         });
       }

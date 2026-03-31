@@ -91,5 +91,6 @@ export interface ResultEnvelope<T = unknown> {
 export interface SessionState {
   name: string;
   platform?: string;
+  deviceId?: string;
   openedAt: string;
 }

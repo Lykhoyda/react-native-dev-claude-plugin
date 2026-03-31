@@ -19,9 +19,16 @@ export function createDeviceSnapshotHandler() {
                 cliArgs.push('--platform', args.platform);
             const result = await runAgentDevice(cliArgs, { skipSession: true });
             if (!result.isError) {
+                let deviceId;
+                try {
+                    const envelope = JSON.parse(result.content[0].text);
+                    deviceId = envelope?.data?.deviceId ?? envelope?.data?.device?.id;
+                }
+                catch { /* best-effort */ }
                 setActiveSession({
                     name: sessionName,
                     platform: args.platform,
+                    deviceId,
                     openedAt: new Date().toISOString(),
                 });
             }
