@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PID_PREFIX="/tmp/rn-dev-agent-record"
+RAW_PREFIX="/tmp/rn-dev-agent-raw"
 
 usage() {
   cat <<'EOF'
@@ -48,14 +49,18 @@ cmd_start() {
   mkdir -p "$(dirname "$output_path")"
   output_path="$(cd "$(dirname "$output_path")" && pwd)/$(basename "$output_path")"
 
+  # Record to temp file in native format; stop will convert to MP4
+  local raw_file="${RAW_PREFIX}-${platform}-$$.mov"
+
   if [[ "$platform" == "ios" ]]; then
     if ! xcrun simctl list devices booted 2>/dev/null | grep -q "Booted"; then
       echo "Error: No iOS simulator booted" >&2
       exit 1
     fi
-    xcrun simctl io booted recordVideo --force "$output_path" &
+    xcrun simctl io booted recordVideo --force "$raw_file" &
     local rec_pid=$!
   else
+    raw_file="${RAW_PREFIX}-${platform}-$$.mp4"
     if ! adb devices 2>/dev/null | grep -q "device$"; then
       echo "Error: No Android device connected" >&2
       exit 1
@@ -74,6 +79,7 @@ cmd_start() {
 
   echo "$rec_pid" > "$pf"
   echo "$output_path" > "$(path_file "$platform")"
+  echo "$raw_file" > "${PID_PREFIX}-${platform}.raw-path"
   [[ "$platform" == "android" ]] && echo "$device_path" > "${PID_PREFIX}-${platform}.device-path"
   echo "Recording started: platform=$platform pid=$rec_pid output=$output_path"
 }
@@ -95,6 +101,11 @@ cmd_stop() {
     pathf="$(path_file "$platform")"
     [[ -f "$pathf" ]] && output_path="$(cat "$pathf")"
 
+    local raw_file=""
+    local raw_pathf="${PID_PREFIX}-${platform}.raw-path"
+    [[ -f "$raw_pathf" ]] && raw_file="$(cat "$raw_pathf")"
+
+    # --- Stop the recording process ---
     if is_alive "$pid"; then
       kill -INT "$pid" 2>/dev/null || true
 
@@ -112,19 +123,58 @@ cmd_stop() {
       fi
     fi
 
-    if [[ "$platform" == "android" && -n "$output_path" ]]; then
+    # Wait for file to be fully written to disk
+    sleep 1
+
+    # --- Pull Android recording from device ---
+    if [[ "$platform" == "android" ]]; then
       local device_pathf="${PID_PREFIX}-${platform}.device-path"
       if [[ -f "$device_pathf" ]]; then
         local device_path
         device_path="$(cat "$device_pathf")"
         sleep 2
-        adb pull "$device_path" "$output_path" 2>/dev/null || echo "Warning: Failed to pull recording from device" >&2
+        adb pull "$device_path" "$raw_file" 2>/dev/null || echo "Warning: Failed to pull recording from device" >&2
         adb shell rm -f "$device_path" 2>/dev/null || true
         rm -f "$device_pathf"
       fi
     fi
 
-    rm -f "$pf" "$pathf"
+    # --- Convert to MP4 with faststart + validate ---
+    # Ensure output path ends in .mp4
+    output_path="${output_path%.mov}.mp4"
+    mkdir -p "$(dirname "$output_path")"
+
+    if [[ -n "$raw_file" && -f "$raw_file" ]]; then
+      if command -v ffmpeg >/dev/null 2>&1; then
+        local tmp_mp4="/tmp/rn-dev-agent-convert-$$.mp4"
+        if ffmpeg -y -i "$raw_file" -c copy -movflags +faststart "$tmp_mp4" 2>/dev/null; then
+          # Validate with ffprobe
+          if command -v ffprobe >/dev/null 2>&1; then
+            if ffprobe -v error -show_entries format=duration "$tmp_mp4" 2>/dev/null | grep -q "duration="; then
+              mv "$tmp_mp4" "$output_path"
+            else
+              echo "Warning: Converted file failed validation. Keeping raw file." >&2
+              mv "$raw_file" "$output_path"
+              rm -f "$tmp_mp4"
+            fi
+          else
+            # No ffprobe — trust the conversion
+            mv "$tmp_mp4" "$output_path"
+          fi
+        else
+          echo "Warning: ffmpeg conversion failed. Keeping raw file." >&2
+          mv "$raw_file" "$output_path"
+        fi
+      else
+        # No ffmpeg — copy raw file directly
+        echo "Warning: ffmpeg not available. Output is raw ${platform} format (install: brew install ffmpeg)" >&2
+        mv "$raw_file" "$output_path"
+      fi
+      # Clean up raw file if it still exists
+      rm -f "$raw_file"
+    fi
+
+    rm -f "$pf" "$pathf" "$raw_pathf"
 
     if [[ -n "$output_path" && -f "$output_path" ]]; then
       local size

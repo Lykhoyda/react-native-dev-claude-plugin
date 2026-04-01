@@ -381,7 +381,7 @@ Then start recording:
 PLATFORM="ios"  # or "android" based on booted devices
 
 # Start recording
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start $PLATFORM docs/proof/<feature-slug>/flow-$PLATFORM.mov
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start $PLATFORM docs/proof/<feature-slug>/flow-$PLATFORM.mp4
 ```
 
 If recording fails to start (no simulator, permissions), log a warning and
@@ -432,11 +432,11 @@ Attempt GIF conversion for inline PR display:
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif \
-  docs/proof/<feature-slug>/flow-$PLATFORM.mov \
+  docs/proof/<feature-slug>/flow-$PLATFORM.mp4 \
   docs/proof/<feature-slug>/flow-$PLATFORM.gif
 ```
 
-If ffmpeg is not available, skip GIF conversion — the raw .mov is still useful.
+If ffmpeg is not available, skip GIF conversion — the raw .mp4 is still useful.
 
 ### Step 3: Write PROOF.md
 
@@ -483,7 +483,7 @@ actually show the expected feature.** This prevents presenting invalid proof.
 Validation checklist:
 1. **Video file exists and has reasonable size** (> 10KB):
    ```bash
-   ls -la docs/proof/<feature-slug>/flow-*.mov docs/proof/<feature-slug>/flow-*.mp4 2>/dev/null
+   ls -la docs/proof/<feature-slug>/flow-*.mp4 2>/dev/null
    ```
 2. **Final screenshot shows the expected end state** — verify via
    `cdp_component_tree` or `cdp_navigation_state` that the app is on the

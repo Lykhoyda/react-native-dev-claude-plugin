@@ -47,7 +47,7 @@ Detect the platform and start recording:
 
 ```bash
 # iOS
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start ios docs/proof/<slug>/flow-ios.mov
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start ios docs/proof/<slug>/flow-ios.mp4
 
 # Android
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start android docs/proof/<slug>/flow-android.mp4
@@ -78,7 +78,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh stop
 
 Attempt GIF conversion:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif docs/proof/<slug>/flow-ios.mov docs/proof/<slug>/flow-ios.gif
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif docs/proof/<slug>/flow-ios.mp4 docs/proof/<slug>/flow-ios.gif
 ```
 
 ### Step 6: VALIDATE the recording (CRITICAL)
@@ -90,7 +90,7 @@ wrong screen, a blank simulator, or an error state.
 Validation checklist:
 1. **Video file exists and has reasonable size** (> 10KB for a real recording):
    ```bash
-   ls -la docs/proof/<slug>/flow-*.mov docs/proof/<slug>/flow-*.mp4 2>/dev/null
+   ls -la docs/proof/<slug>/flow-*.mp4 2>/dev/null
    ```
 
 2. **Final screenshot shows the expected end state** — take a screenshot
