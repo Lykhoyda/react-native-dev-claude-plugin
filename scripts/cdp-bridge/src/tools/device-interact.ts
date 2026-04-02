@@ -92,8 +92,13 @@ async function androidClipboardFill(text: string): Promise<ToolResult> {
       chunks.push(text.slice(i, i + 10));
     }
     for (const chunk of chunks) {
-      const adbEscaped = chunk.replace(/ /g, '%s').replace(/[&|;<>()$`\\!"'*?[\]{}]/g, (c) => `\\${c}`);
-      await execFile('adb', [...serial, 'shell', 'input', 'text', adbEscaped], { timeout: 10000 });
+      // Replace spaces with %s (adb input text convention)
+      // Use single-quoted shell string to prevent Android shell expansion
+      // Single quotes inside the text must be escaped as '\''
+      const escaped = chunk
+        .replace(/ /g, '%s')
+        .replace(/'/g, "'\\''");
+      await execFile('adb', [...serial, 'shell', 'input', 'text', `'${escaped}'`], { timeout: 10000 });
     }
     return okResult({ filled: true, method: 'adb-chunked-input', length: text.length });
   } catch (err: unknown) {
