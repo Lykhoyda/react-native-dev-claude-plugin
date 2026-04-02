@@ -120,6 +120,22 @@ failure_families:
       and long strings (> 30 chars) can overwhelm the input method causing ANR or
       crash. The device_fill tool auto-detects Android and chunks input (GH #7).
 
+  - id: FF_AUTH_GATE
+    name: App on auth screen — not logged in
+    symptoms:
+      - navigation state shows Login or Welcome or Register or Auth route
+      - feature screen not reachable — app stuck on auth
+      - note: empty nav state is NOT auth — check FF_DEV_CLIENT_PICKER first
+    recovery:
+      - check .maestro/subflows/ for login/registration flows
+      - run maestro-runner --platform <platform> test .maestro/subflows/login.yaml
+      - verify cdp_navigation_state shows main app screen after login
+      - if no subflows found, ask user to log in manually
+    notes: >
+      On fresh/erased devices or after clearState, the app starts logged out.
+      Manual coordinate-based login is unreliable (keyboard covers buttons).
+      Maestro subflows handle this in seconds. See GH #10.
+
   - id: FF_DEBUGGER_PAUSED
     name: Debugger paused — JS execution halted
     symptoms:

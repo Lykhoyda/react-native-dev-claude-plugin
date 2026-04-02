@@ -265,6 +265,82 @@ maestro-runner --platform android test flows/feature.yaml
 
 ---
 
+## Auth Pre-flight: Auto-login via Maestro Subflows (GH #10)
+
+Before testing features that require authentication, check if the app is
+on a login/auth screen. If so, use the project's own Maestro subflows
+instead of unreliable manual coordinate taps.
+
+### Detection
+
+Call `cdp_navigation_state` and check the route name. Auth-related routes
+typically match: `Login`, `Welcome`, `SignIn`, `Register`, `Onboarding`,
+`Auth`, `Landing`.
+
+**Caution**: An empty navigation state may be a splash screen (loading) or
+the Dev Client picker (GH #9), not necessarily auth. Wait 3 seconds and
+retry before concluding the app is logged out.
+
+### Discovery
+
+Scan for Maestro subflows in the project:
+```bash
+ls .maestro/subflows/ .maestro/ 2>/dev/null
+```
+
+**Prefer login over registration** (idempotent, no backend junk):
+1. `login.yaml`, `sign_in.yaml`, `auth.yaml`
+2. `flow_start.yaml` (often includes login)
+3. `register_user.yaml` (last resort — creates accounts)
+
+Read the file to confirm it performs authentication.
+
+### Pre-execution checks
+
+1. **`clearState: true`**: If the subflow contains it and this is a Dev
+   Client build, copy to `/tmp/` and strip the line before running (GH #8).
+2. **Environment variables**: If the flow uses `${EMAIL}`, `${PASSWORD}`,
+   etc., check for `.env` or `.maestro/config.yaml`. Ask the user if needed.
+3. **`appId`**: Subflows often lack `appId`. Wrap them:
+   ```bash
+   cat > /tmp/auth-wrapper.yaml << EOF
+   appId: <bundle-id>
+   ---
+   - launchApp
+   - runFlow:
+       file: $(pwd)/.maestro/subflows/login.yaml
+   EOF
+   ```
+
+### Execution
+
+```bash
+# ALWAYS use maestro-runner (classic Maestro gRPC is unreliable on Android)
+maestro-runner --platform <ios|android> test /tmp/auth-wrapper.yaml
+```
+
+If maestro-runner is not installed, STOP and tell the user to install it.
+Do NOT fall back to classic Maestro.
+
+### Verification
+
+After the subflow completes, verify arrival at the main app:
+```
+cdp_navigation_state → route should be a main screen (Home, Dashboard, Tabs)
+```
+
+### Rules
+
+- **NEVER** fall back to classic Maestro for auth flows (GH #7)
+- **NEVER** use `clearState: true` with Dev Client builds (GH #8)
+- **ALWAYS** pass `--platform` to maestro-runner
+- **Skip** the notification `permissions` config if testing notification
+  permission flows (preserve undetermined state)
+- If no Maestro subflows found, inform the user and ask them to log in
+  manually or create `.maestro/subflows/login.yaml`
+
+---
+
 ## Dev Menu: Use CDP, Not the Visual Menu
 
 NEVER open the visual dev menu during automated testing — it overlays the
