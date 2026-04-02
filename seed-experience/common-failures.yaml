@@ -127,8 +127,10 @@ failure_families:
       - feature screen not reachable — app stuck on auth
       - note: empty nav state is NOT auth — check FF_DEV_CLIENT_PICKER first
     recovery:
-      - check .maestro/subflows/ for login/registration flows
-      - run maestro-runner --platform <platform> test .maestro/subflows/login.yaml
+      - scan .maestro/subflows/ for login flows (prefer login.yaml over register_user.yaml)
+      - check subflow for clearState:true — strip it on Dev Client builds
+      - wrap subflow with appId via runFlow pattern (subflows often lack appId)
+      - run maestro-runner --platform <platform> test /tmp/auth-wrapper.yaml
       - verify cdp_navigation_state shows main app screen after login
       - if no subflows found, ask user to log in manually
     notes: >
