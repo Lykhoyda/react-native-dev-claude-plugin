@@ -1,6 +1,6 @@
 import type { CDPClient } from '../cdp-client.js';
 import { okResult, failResult, warnResult, withConnection } from '../utils.js';
-import type { RawNavTopology, NavGraphScanResult, NavGraph } from '../nav-graph/types.js';
+import type { RawNavTopology, NavGraphScanResult, NavGraph, NavMethod } from '../nav-graph/types.js';
 import {
   findProjectRoot,
   readGraph,
@@ -8,6 +8,7 @@ import {
   buildGraph,
   mergeGraph,
   getGraphPath,
+  recordNavigation,
 } from '../nav-graph/storage.js';
 import type { MergeResult } from '../nav-graph/storage.js';
 import {
@@ -18,11 +19,14 @@ import {
 } from '../nav-graph/query.js';
 
 interface NavGraphArgs {
-  action: 'scan' | 'read' | 'navigate';
+  action: 'scan' | 'read' | 'navigate' | 'record';
   navigator_id?: string;
   screen?: string;
   force?: boolean;
   from?: string;
+  method?: NavMethod;
+  success?: boolean;
+  latency_ms?: number;
 }
 
 export function createNavGraphHandler(getClient: () => CDPClient) {
@@ -220,9 +224,32 @@ export function createNavGraphHandler(getClient: () => CDPClient) {
     });
   };
 
+  const recordHandler = async (args: NavGraphArgs) => {
+    if (!args.screen) return failResult('screen is required for action="record".');
+    if (!args.method) return failResult('method is required for action="record" (programmatic, deep_link, or ui_interaction).');
+    if (args.success === undefined) return failResult('success is required for action="record" (true or false).');
+
+    const projectRoot = findProjectRoot();
+    if (!projectRoot) return failResult('Cannot find project root.');
+
+    const result = recordNavigation(projectRoot, {
+      screen: args.screen,
+      method: args.method,
+      success: args.success,
+      latency_ms: args.latency_ms,
+    });
+
+    if (!result) {
+      return failResult(`Screen "${args.screen}" not found in graph. Run action="scan" first.`);
+    }
+
+    return okResult(result);
+  };
+
   return async (args: NavGraphArgs) => {
     if (args.action === 'scan') return scanHandler(args);
     if (args.action === 'navigate') return navigateHandler(args);
+    if (args.action === 'record') return recordHandler(args);
     return readHandler(args);
   };
 }

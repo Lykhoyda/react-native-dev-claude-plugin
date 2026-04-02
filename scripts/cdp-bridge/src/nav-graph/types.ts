@@ -12,6 +12,8 @@ export interface NavScreen {
   reliability_score: number;
   visit_count: number;
   last_seen?: string;
+  avg_load_ms?: number;
+  action_records?: NavActionRecord[];
 }
 
 export interface NavNavigator {
@@ -105,6 +107,43 @@ export interface NavigationPrerequisite {
   description: string;
   check_tool?: string;
   check_args?: Record<string, unknown>;
+}
+
+// --- Phase C: Runtime Learning ---
+
+export interface NavActionRecord {
+  method: NavMethod;
+  success: boolean;
+  latency_ms: number;
+  recorded_at: string;
+}
+
+export interface StrikeEntry {
+  screen: string;
+  method: NavMethod;
+  consecutive_failures: number;
+  last_failure_at: string;
+  cooled_until?: string;
+}
+
+export interface NavRecordInput {
+  screen: string;
+  method: NavMethod;
+  success: boolean;
+  latency_ms?: number;
+}
+
+export interface NavRecordResult {
+  screen: string;
+  method: NavMethod;
+  success: boolean;
+  new_reliability_score: number;
+  new_visit_count: number;
+  strike_status?: {
+    consecutive_failures: number;
+    cooled_down: boolean;
+    cooled_until?: string;
+  };
 }
 
 export interface NavGraphScanResult {

@@ -1,7 +1,20 @@
 import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as yamlStringify, parse as yamlParse } from 'yaml';
-import type { NavGraph, NavGraphMeta, NavNavigator, NavScreen, RawNavTopology, RawNavigator, RawRoute } from './types.js';
+import type {
+  NavGraph,
+  NavGraphMeta,
+  NavNavigator,
+  NavScreen,
+  NavActionRecord,
+  NavMethod,
+  NavRecordInput,
+  NavRecordResult,
+  StrikeEntry,
+  RawNavTopology,
+  RawNavigator,
+  RawRoute,
+} from './types.js';
 
 const GRAPH_FILENAME = '.rn-nav-graph.yaml';
 
@@ -155,6 +168,8 @@ export function mergeGraph(existing: NavGraph, raw: RawNavTopology, projectRoot:
           : Math.max(prev.reliability_score, screen.reliability_score);
         screen.visit_count = prev.visit_count + (screen.is_active ? 1 : 0);
         screen.last_seen = screen.is_active ? new Date().toISOString() : prev.last_seen;
+        if (prev.action_records) screen.action_records = prev.action_records;
+        if (prev.avg_load_ms) screen.avg_load_ms = prev.avg_load_ms;
       }
     }
   }
@@ -168,4 +183,131 @@ export function mergeGraph(existing: NavGraph, raw: RawNavTopology, projectRoot:
   fresh.meta.scan_count = existing.meta.scan_count + 1;
 
   return { graph: fresh, new_routes: newRoutes, removed_routes: removedRoutes };
+}
+
+// --- Phase C: Runtime Learning ---
+
+const MAX_ACTION_RECORDS = 20;
+const STRIKE_COOLDOWN_MS = 5 * 60 * 1000;
+const STRIKE_THRESHOLD = 2;
+const RELIABILITY_SUCCESS_DELTA = 5;
+const RELIABILITY_FAILURE_DELTA = -15;
+
+const strikeMap = new Map<string, StrikeEntry>();
+
+function strikeKey(screen: string, method: NavMethod): string {
+  return `${screen}::${method}`;
+}
+
+export function isMethodCooledDown(screen: string, method: NavMethod): boolean {
+  const entry = strikeMap.get(strikeKey(screen, method));
+  if (!entry || !entry.cooled_until) return false;
+  return Date.now() < new Date(entry.cooled_until).getTime();
+}
+
+export function getStrikeStatus(screen: string, method: NavMethod): StrikeEntry | null {
+  return strikeMap.get(strikeKey(screen, method)) ?? null;
+}
+
+function updateStrike(screen: string, method: NavMethod, success: boolean): StrikeEntry {
+  const key = strikeKey(screen, method);
+  const existing = strikeMap.get(key);
+
+  if (success) {
+    strikeMap.delete(key);
+    return { screen, method, consecutive_failures: 0, last_failure_at: '' };
+  }
+
+  const now = new Date().toISOString();
+  if (existing) {
+    if (existing.cooled_until && Date.now() >= new Date(existing.cooled_until).getTime()) {
+      existing.consecutive_failures = 0;
+      existing.cooled_until = undefined;
+    }
+    existing.consecutive_failures++;
+    existing.last_failure_at = now;
+    if (existing.consecutive_failures >= STRIKE_THRESHOLD && !existing.cooled_until) {
+      existing.cooled_until = new Date(Date.now() + STRIKE_COOLDOWN_MS).toISOString();
+    }
+    return existing;
+  }
+
+  const entry: StrikeEntry = {
+    screen,
+    method,
+    consecutive_failures: 1,
+    last_failure_at: now,
+  };
+  strikeMap.set(key, entry);
+  return entry;
+}
+
+export function recordNavigation(
+  projectRoot: string,
+  input: NavRecordInput,
+): NavRecordResult | null {
+  const graph = readGraph(projectRoot);
+  if (!graph) return null;
+
+  let targetScreen: NavScreen | null = null;
+  for (const nav of graph.navigators) {
+    const found = nav.screens.find(s => s.name === input.screen);
+    if (found) { targetScreen = found; break; }
+  }
+  if (!targetScreen) return null;
+
+  const now = new Date().toISOString();
+
+  const record: NavActionRecord = {
+    method: input.method,
+    success: input.success,
+    latency_ms: input.latency_ms ?? 0,
+    recorded_at: now,
+  };
+
+  if (!targetScreen.action_records) targetScreen.action_records = [];
+  targetScreen.action_records.push(record);
+  if (targetScreen.action_records.length > MAX_ACTION_RECORDS) {
+    targetScreen.action_records = targetScreen.action_records.slice(-MAX_ACTION_RECORDS);
+  }
+
+  if (input.success) {
+    targetScreen.reliability_score = Math.min(
+      targetScreen.reliability_score + RELIABILITY_SUCCESS_DELTA,
+      100,
+    );
+    targetScreen.visit_count++;
+    targetScreen.last_seen = now;
+  } else {
+    targetScreen.reliability_score = Math.max(
+      targetScreen.reliability_score + RELIABILITY_FAILURE_DELTA,
+      0,
+    );
+  }
+
+  const successRecords = (targetScreen.action_records ?? []).filter(r => r.success && r.latency_ms > 0);
+  targetScreen.avg_load_ms = successRecords.length > 0
+    ? Math.round(successRecords.reduce((sum, r) => sum + r.latency_ms, 0) / successRecords.length)
+    : undefined;
+
+  const strike = updateStrike(input.screen, input.method, input.success);
+
+  try {
+    writeGraph(projectRoot, graph);
+  } catch { /* best effort */ }
+
+  return {
+    screen: input.screen,
+    method: input.method,
+    success: input.success,
+    new_reliability_score: targetScreen.reliability_score,
+    new_visit_count: targetScreen.visit_count,
+    strike_status: strike.consecutive_failures > 0
+      ? {
+          consecutive_failures: strike.consecutive_failures,
+          cooled_down: !!strike.cooled_until && Date.now() < new Date(strike.cooled_until).getTime(),
+          cooled_until: strike.cooled_until,
+        }
+      : undefined,
+  };
 }

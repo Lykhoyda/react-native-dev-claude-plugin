@@ -8,6 +8,7 @@ import type {
   NavigationPrerequisite,
   NavMethod,
 } from './types.js';
+import { isMethodCooledDown } from './storage.js';
 
 export interface RouteLocation {
   navigator_id: string;
@@ -268,6 +269,12 @@ export function buildNavigationPlan(
     });
   }
 
+  for (const step of steps) {
+    if (isMethodCooledDown(step.target_screen, step.method)) {
+      step.note = `[COOLED DOWN] ${step.note ?? ''} — method failed 2+ times recently, consider alternative`;
+    }
+  }
+
   let reliability = 100;
   const programmaticSteps = steps.filter(s => s.method === 'programmatic');
   for (const step of programmaticSteps) {
@@ -278,11 +285,22 @@ export function buildNavigationPlan(
     }
   }
 
+  const hasCooledProgrammatic = programmaticSteps.some(s =>
+    isMethodCooledDown(s.target_screen, s.method),
+  );
+
   const prerequisites = detectPrerequisites(graph, targetScreen);
 
-  const preferredMethod: NavMethod = deepLinkAvailable && programmaticSteps.length >= 2
+  let preferredMethod: NavMethod = deepLinkAvailable && programmaticSteps.length >= 2
     ? 'deep_link'
     : 'programmatic';
+  if (hasCooledProgrammatic) {
+    if (deepLinkAvailable && !isMethodCooledDown(targetScreen, 'deep_link')) {
+      preferredMethod = 'deep_link';
+    } else if (!isMethodCooledDown(targetScreen, 'ui_interaction')) {
+      preferredMethod = 'ui_interaction';
+    }
+  }
 
   return {
     from: currentScreen,

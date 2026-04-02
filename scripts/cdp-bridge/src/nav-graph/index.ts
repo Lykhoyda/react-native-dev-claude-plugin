@@ -13,6 +13,10 @@ export type {
   NavigationStep,
   NavigationPlan,
   NavigationPrerequisite,
+  NavActionRecord,
+  StrikeEntry,
+  NavRecordInput,
+  NavRecordResult,
 } from './types.js';
 
 export type { MergeResult } from './storage.js';
@@ -24,6 +28,9 @@ export {
   writeGraph,
   buildGraph,
   mergeGraph,
+  recordNavigation,
+  isMethodCooledDown,
+  getStrikeStatus,
 } from './storage.js';
 
 export {

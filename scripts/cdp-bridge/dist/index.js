@@ -52,12 +52,15 @@ trackedTool('cdp_component_tree', 'Get React component tree. Returns components 
     depth: z.number().int().min(1).max(12).default(4).describe('Max depth (default 4, max 12)'),
 }, createComponentTreeHandler(getClient));
 trackedTool('cdp_navigation_state', 'Get current navigation state: active route, params, stack history, nested navigators, active tab. Works with React Navigation and Expo Router.', {}, createNavigationStateHandler(getClient));
-trackedTool('cdp_nav_graph', 'Navigation graph tool with 3 actions. scan: extract full topology from running app (all screens + navigators including unvisited), persist to .rn-nav-graph.yaml. read: load cached graph from disk (no CDP). navigate: plan multi-step path to a target screen with method ranking and prerequisite detection. Use cdp_navigation_state for current route only.', {
-    action: z.enum(['scan', 'read', 'navigate']).describe('scan = extract from running app, read = load cached graph, navigate = plan path to target screen'),
-    navigator_id: z.string().optional().describe('(read) Filter to a specific navigator subtree by id (e.g. "root", "Home/stack")'),
-    screen: z.string().optional().describe('(read/navigate) Target screen name. read: find screen location. navigate: plan path to this screen'),
-    from: z.string().optional().describe('(navigate) Current screen name. If omitted, uses the active screen from the graph'),
-    force: z.boolean().default(false).describe('(scan) Force re-scan even if scanned within last 5 minutes'),
+trackedTool('cdp_nav_graph', 'Navigation graph tool with 4 actions. scan: extract full topology from running app, persist to .rn-nav-graph.yaml. read: load cached graph (no CDP). navigate: plan multi-step path to target screen with method ranking. record: log navigation outcome to update reliability scores and trigger two-strike cooldown. Use cdp_navigation_state for current route only.', {
+    action: z.enum(['scan', 'read', 'navigate', 'record']).describe('scan = extract topology, read = load cached, navigate = plan path, record = log outcome'),
+    navigator_id: z.string().optional().describe('(read) Filter to navigator subtree by id'),
+    screen: z.string().optional().describe('(read/navigate/record) Target screen name'),
+    from: z.string().optional().describe('(navigate) Current screen name. Omit to use active screen from graph'),
+    force: z.boolean().default(false).describe('(scan) Force re-scan even if scanned within 5 minutes'),
+    method: z.enum(['programmatic', 'deep_link', 'ui_interaction']).optional().describe('(record) Navigation method used'),
+    success: z.boolean().optional().describe('(record) Whether navigation succeeded'),
+    latency_ms: z.number().optional().describe('(record) Time taken for navigation in milliseconds'),
 }, createNavGraphHandler(getClient));
 trackedTool('cdp_error_log', 'Get unhandled JS errors and promise rejections. Hooked into ErrorUtils and Hermes rejection tracker. If empty but app crashed, the error is NATIVE — use bash logcat/simctl log instead.', {
     clear: z.boolean().default(false).describe('Clear all captured errors instead of reading them'),

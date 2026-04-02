@@ -1,5 +1,5 @@
 import { okResult, failResult, warnResult, withConnection } from '../utils.js';
-import { findProjectRoot, readGraph, writeGraph, buildGraph, mergeGraph, getGraphPath, } from '../nav-graph/storage.js';
+import { findProjectRoot, readGraph, writeGraph, buildGraph, mergeGraph, getGraphPath, recordNavigation, } from '../nav-graph/storage.js';
 import { findRouteInGraph, listAllRoutes, getNavigatorSubtree, buildNavigationPlan, } from '../nav-graph/query.js';
 export function createNavGraphHandler(getClient) {
     const scanHandler = withConnection(getClient, async (args, client) => {
@@ -168,11 +168,34 @@ export function createNavGraphHandler(getClient) {
                 : [`Open deep link: ${plan.deep_link_path}`],
         });
     };
+    const recordHandler = async (args) => {
+        if (!args.screen)
+            return failResult('screen is required for action="record".');
+        if (!args.method)
+            return failResult('method is required for action="record" (programmatic, deep_link, or ui_interaction).');
+        if (args.success === undefined)
+            return failResult('success is required for action="record" (true or false).');
+        const projectRoot = findProjectRoot();
+        if (!projectRoot)
+            return failResult('Cannot find project root.');
+        const result = recordNavigation(projectRoot, {
+            screen: args.screen,
+            method: args.method,
+            success: args.success,
+            latency_ms: args.latency_ms,
+        });
+        if (!result) {
+            return failResult(`Screen "${args.screen}" not found in graph. Run action="scan" first.`);
+        }
+        return okResult(result);
+    };
     return async (args) => {
         if (args.action === 'scan')
             return scanHandler(args);
         if (args.action === 'navigate')
             return navigateHandler(args);
+        if (args.action === 'record')
+            return recordHandler(args);
         return readHandler(args);
     };
 }

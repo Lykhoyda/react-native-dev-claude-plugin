@@ -1,3 +1,4 @@
+import { isMethodCooledDown } from './storage.js';
 export function findRouteInGraph(graph, routeName) {
     const candidates = [];
     for (const nav of graph.navigators) {
@@ -220,6 +221,11 @@ export function buildNavigationPlan(graph, targetScreen, fromScreen) {
             note: `Alternative: deep link to "${targetLocation.screen.path}" (may trigger Dev Client picker)`,
         });
     }
+    for (const step of steps) {
+        if (isMethodCooledDown(step.target_screen, step.method)) {
+            step.note = `[COOLED DOWN] ${step.note ?? ''} — method failed 2+ times recently, consider alternative`;
+        }
+    }
     let reliability = 100;
     const programmaticSteps = steps.filter(s => s.method === 'programmatic');
     for (const step of programmaticSteps) {
@@ -229,10 +235,19 @@ export function buildNavigationPlan(graph, targetScreen, fromScreen) {
             reliability = Math.min(reliability, computeStepReliability(screen, nav.kind));
         }
     }
+    const hasCooledProgrammatic = programmaticSteps.some(s => isMethodCooledDown(s.target_screen, s.method));
     const prerequisites = detectPrerequisites(graph, targetScreen);
-    const preferredMethod = deepLinkAvailable && programmaticSteps.length >= 2
+    let preferredMethod = deepLinkAvailable && programmaticSteps.length >= 2
         ? 'deep_link'
         : 'programmatic';
+    if (hasCooledProgrammatic) {
+        if (deepLinkAvailable && !isMethodCooledDown(targetScreen, 'deep_link')) {
+            preferredMethod = 'deep_link';
+        }
+        else if (!isMethodCooledDown(targetScreen, 'ui_interaction')) {
+            preferredMethod = 'ui_interaction';
+        }
+    }
     return {
         from: currentScreen,
         to: targetScreen,
