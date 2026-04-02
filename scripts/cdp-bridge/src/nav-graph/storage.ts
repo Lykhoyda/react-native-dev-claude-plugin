@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as yamlStringify, parse as yamlParse } from 'yaml';
 import type {
@@ -18,14 +18,49 @@ import type {
 
 const GRAPH_FILENAME = '.rn-nav-graph.yaml';
 
-export function findProjectRoot(): string | null {
-  let dir = process.cwd();
-  for (let i = 0; i < 10; i++) {
-    if (existsSync(join(dir, 'package.json'))) return dir;
-    const parent = join(dir, '..');
-    if (parent === dir) break;
-    dir = parent;
+function isRnProject(dir: string): boolean {
+  const pkgPath = join(dir, 'package.json');
+  if (!existsSync(pkgPath)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    return !!(deps['react-native'] || deps['expo']);
+  } catch {
+    return false;
   }
+}
+
+export function findProjectRoot(): string | null {
+  const candidates = [
+    process.env.RN_PROJECT_ROOT,
+    process.env.CLAUDE_USER_CWD,
+    process.cwd(),
+  ].filter(Boolean) as string[];
+
+  for (const start of candidates) {
+    if (isRnProject(start)) return start;
+    let dir = start;
+    for (let i = 0; i < 10; i++) {
+      if (isRnProject(dir)) return dir;
+      const parent = join(dir, '..');
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+
+  // Last resort: scan subdirectories of cwd for an RN project (e.g. plugin repo with test-app/ symlink)
+  const cwd = process.cwd();
+  try {
+    for (const entry of readdirSync(cwd)) {
+      const full = join(cwd, entry);
+      try {
+        if (lstatSync(full).isDirectory() || lstatSync(full).isSymbolicLink()) {
+          if (isRnProject(full)) return full;
+        }
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+
   return null;
 }
 

@@ -42,6 +42,12 @@ if ! command -v java &>/dev/null; then
   done
 fi
 
+# Forward CLAUDE_USER_CWD so nav-graph findProjectRoot can locate the RN project
+# Claude Code sets this to the user's working directory at session start
+if [ -z "${CLAUDE_USER_CWD:-}" ] && [ -n "${PWD:-}" ]; then
+  export CLAUDE_USER_CWD="$PWD"
+fi
+
 if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
   cd "$SCRIPT_DIR" && npm install --production --silent 2>/dev/null
 fi
