@@ -21,6 +21,7 @@ import { createDeviceSnapshotHandler } from './tools/device-session.js';
 import { createDeviceFindHandler, createDevicePressHandler, createDeviceFillHandler, createDeviceSwipeHandler, createDeviceScrollHandler, createDeviceScrollIntoViewHandler, createDeviceLongPressHandler, createDevicePinchHandler, createDeviceBackHandler, } from './tools/device-interact.js';
 import { createDevicePermissionHandler } from './tools/device-permission.js';
 import { createNavGraphHandler } from './tools/nav-graph.js';
+import { createDeviceBatchHandler } from './tools/device-batch.js';
 import { instrumentTool, pruneOldTelemetry } from './experience/index.js';
 pruneOldTelemetry();
 let client = new CDPClient();
@@ -216,6 +217,19 @@ trackedTool('device_permission', 'Grant, revoke, reset, or query app permissions
     appId: z.string().describe('App bundle ID (e.g. "com.example.app")'),
     platform: z.string().optional().describe('Force platform: "ios" or "android". Auto-detected if omitted.'),
 }, createDevicePermissionHandler());
+trackedTool('device_batch', 'Execute a sequence of UI interactions in ONE tool call. Eliminates LLM round-trip overhead. Steps: find (text + optional tap), fill (ref + text), scroll/swipe (direction), back, wait (ms), hideKeyboard, snapshot, screenshot. Fails fast on error unless step has optional=true.', {
+    steps: z.array(z.object({
+        action: z.enum(['find', 'press', 'fill', 'swipe', 'scroll', 'back', 'wait', 'hideKeyboard', 'snapshot', 'screenshot']).describe('Step action'),
+        text: z.string().optional().describe('(find/fill) Text to find or type'),
+        ref: z.string().optional().describe('(press/fill) Element ref from snapshot (e.g. "e5")'),
+        tap: z.boolean().optional().describe('(find) Tap the found element'),
+        direction: z.enum(['up', 'down', 'left', 'right']).optional().describe('(scroll/swipe) Direction'),
+        ms: z.number().optional().describe('(wait) Milliseconds to wait'),
+        optional: z.boolean().optional().describe('Skip this step on failure instead of aborting'),
+    })).describe('Ordered list of UI interaction steps'),
+    delayMs: z.number().default(300).describe('Delay between steps in ms (default 300)'),
+    screenshotOn: z.enum(['none', 'failure', 'end', 'each']).default('failure').describe('When to capture screenshots'),
+}, createDeviceBatchHandler());
 process.on('uncaughtException', (err) => {
     console.error('MCP server uncaught exception:', err.message);
     process.exit(1);
