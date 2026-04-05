@@ -4,7 +4,7 @@ import UIKit
 @objc
 final class EventRecord: NSObject {
     let eventRecord: NSObject
-    static let defaultTapDuration = 0.1
+    static let defaultTapDuration = 0.005
 
     init(orientation: UIInterfaceOrientation = .portrait) {
         guard let clazz = objc_lookUpClass("XCSynthesizedEventRecord") else {

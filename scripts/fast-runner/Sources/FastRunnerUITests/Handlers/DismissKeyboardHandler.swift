@@ -20,7 +20,7 @@ struct DismissKeyboardHandler: HTTPHandler {
             end: CGPoint(x: centerX, y: swipeEndY),
             duration: 0.05
         )
-        try await RunnerDaemonProxy().synthesize(eventRecord: eventRecord)
+        try await RunnerDaemonProxy.shared().synthesize(eventRecord: eventRecord)
 
         return HTTPResponse(statusCode: .ok, body: Data("{\"ok\":true}".utf8))
     }

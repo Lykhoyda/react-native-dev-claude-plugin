@@ -14,7 +14,16 @@ enum FastRunnerError: Error, LocalizedError {
 final class RunnerDaemonProxy {
     private let proxy: NSObject
 
-    init() throws {
+    private static var cached: RunnerDaemonProxy?
+
+    static func shared() throws -> RunnerDaemonProxy {
+        if let c = cached { return c }
+        let instance = try RunnerDaemonProxy()
+        cached = instance
+        return instance
+    }
+
+    private init() throws {
         guard let clazz = NSClassFromString("XCTRunnerDaemonSession") else {
             throw FastRunnerError.missingPrivateAPI("XCTRunnerDaemonSession not found — Xcode version may be incompatible")
         }
