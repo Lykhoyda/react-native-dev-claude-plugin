@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { CDPClient } from './cdp-client.js';
-import { okResult, failResult, withConnection } from './utils.js';
+import { okResult, failResult, warnResult, withConnection } from './utils.js';
 import { createStatusHandler } from './tools/status.js';
 import { createEvaluateHandler } from './tools/evaluate.js';
 import { createReloadHandler } from './tools/reload.js';
@@ -22,6 +22,7 @@ import { createDeviceFindHandler, createDevicePressHandler, createDeviceFillHand
 import { createDevicePermissionHandler } from './tools/device-permission.js';
 import { createNavGraphHandler } from './tools/nav-graph.js';
 import { createDeviceBatchHandler } from './tools/device-batch.js';
+import { handleAutoLogin } from './tools/auto-login.js';
 import { stopFastRunner } from './fast-runner-session.js';
 import { instrumentTool, pruneOldTelemetry } from './experience/index.js';
 pruneOldTelemetry();
@@ -231,6 +232,19 @@ trackedTool('device_batch', 'Execute a sequence of UI interactions in ONE tool c
     delayMs: z.number().default(300).describe('Delay between steps in ms (default 300)'),
     screenshotOn: z.enum(['none', 'failure', 'end', 'each']).default('failure').describe('When to capture screenshots'),
 }, createDeviceBatchHandler());
+trackedTool('cdp_auto_login', 'Pre-flight check: detect if the app is on a login/auth screen and auto-login via Maestro subflows from the project. Scans .maestro/subflows/ for login.yaml, sign_in.yaml, auth.yaml, flow_start.yaml, register_user.yaml. Returns { loggedIn: true/false, reason, flow }. Call before proof capture or feature testing when app may be logged out.', {
+    appId: z.string().optional().describe('App bundle ID override (auto-detected from app.json if omitted)'),
+    platform: z.enum(['ios', 'android']).optional().describe('Platform override (auto-detected from session if omitted)'),
+}, withConnection(getClient, async (args, client) => {
+    const result = await handleAutoLogin(client, args);
+    if (result === null)
+        return failResult('CDP not connected or helpers not injected');
+    if (result.loggedIn)
+        return okResult(result);
+    if (result.reason.includes('not on an auth screen'))
+        return okResult(result);
+    return warnResult(result, result.reason);
+}));
 process.on('uncaughtException', (err) => {
     console.error('MCP server uncaught exception:', err.message);
     stopFastRunner();
