@@ -1,3 +1,4 @@
+import Foundation
 import FlyingFox
 
 struct HealthHandler: HTTPHandler {

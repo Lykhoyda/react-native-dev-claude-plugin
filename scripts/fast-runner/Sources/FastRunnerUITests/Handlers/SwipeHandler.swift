@@ -10,9 +10,10 @@ struct SwipeRequest: Decodable {
 }
 
 struct SwipeHandler: HTTPHandler {
+    
     @MainActor
     func handleRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
-        let body = try JSONDecoder().decode(SwipeRequest.self, from: request.body)
+        let body = try JSONDecoder().decode(SwipeRequest.self, from: try await request.bodyData)
         let duration = (body.durationMs ?? 300) / 1000.0
 
         let eventRecord = EventRecord()

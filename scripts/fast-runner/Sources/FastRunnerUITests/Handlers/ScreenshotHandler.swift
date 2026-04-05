@@ -3,6 +3,7 @@ import FlyingFox
 import XCTest
 
 struct ScreenshotHandler: HTTPHandler {
+    
     @MainActor
     func handleRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
         let screenshot = XCUIScreen.main.screenshot()

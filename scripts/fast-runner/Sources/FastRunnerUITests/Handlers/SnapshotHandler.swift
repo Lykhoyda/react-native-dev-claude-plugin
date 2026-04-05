@@ -3,15 +3,16 @@ import FlyingFox
 import XCTest
 
 struct SnapshotHandler: HTTPHandler {
+    
     @MainActor
     func handleRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
         let app = XCUIApplication()
 
         // Attempt snapshot — may throw kAXErrorIllegalArgument on large RN trees
-        let snapshotDict: [String: Any]
+        let snapshotDict: Any
         do {
             let snapshot = try app.snapshot()
-            snapshotDict = snapshot.dictionaryRepresentation
+            snapshotDict = snapshot.dictionaryRepresentation as Any
         } catch {
             // Fallback: return error with suggestion
             let errorResponse = """

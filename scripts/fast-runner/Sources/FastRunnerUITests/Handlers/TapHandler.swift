@@ -10,7 +10,7 @@ struct TapRequest: Decodable {
 struct TapHandler: HTTPHandler {
     @MainActor
     func handleRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
-        let body = try JSONDecoder().decode(TapRequest.self, from: request.body)
+        let body = try JSONDecoder().decode(TapRequest.self, from: try await request.bodyData)
         let start = CFAbsoluteTimeGetCurrent()
 
         let eventRecord = EventRecord()

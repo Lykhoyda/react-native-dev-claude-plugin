@@ -6,14 +6,13 @@ options:
 settings:
   base:
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
-    SDKROOT: iphoneos
-    SUPPORTED_PLATFORMS: "iphonesimulator iphoneos"
-    SUPPORTS_MACCATALYST: NO
+    SDKROOT: auto
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
 
 packages:
   FlyingFox:
     url: https://github.com/swhitty/FlyingFox
-    from: "0.22.0"
+    exactVersion: "0.22.0"
 
 targets:
   FastRunnerApp:
@@ -26,6 +25,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.rndevagent.fastrunner
         INFOPLIST_FILE: ""
         GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SDKROOT: auto
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
 
   FastRunnerUITests:
     type: bundle.ui-testing
@@ -38,3 +40,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.rndevagent.fastrunner.uitests
+        TEST_TARGET_NAME: FastRunnerApp
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SDKROOT: auto
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        GENERATE_INFOPLIST_FILE: YES

@@ -8,7 +8,7 @@ struct TypeRequest: Decodable {
 struct TypeHandler: HTTPHandler {
     @MainActor
     func handleRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
-        let body = try JSONDecoder().decode(TypeRequest.self, from: request.body)
+        let body = try JSONDecoder().decode(TypeRequest.self, from: try await request.bodyData)
         let text = body.text
 
         guard !text.isEmpty else {
