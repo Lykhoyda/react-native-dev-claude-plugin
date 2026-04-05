@@ -190,6 +190,12 @@ export interface GoResult {
   plan?: NavigationPlan;
   heal_advice?: SelfHealResult;
   error?: string;
+  startup_replay?: {
+    picker_dismissed?: boolean;
+    reconnect_attempts?: number;
+  };
+  startup_replay_attempted?: boolean;
+  startup_replay_error?: string;
 }
 
 export interface NavGraphScanResult {

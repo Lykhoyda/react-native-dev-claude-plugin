@@ -1,5 +1,6 @@
 import type { CDPClient } from '../cdp-client.js';
 import { okResult, failResult, warnResult, withConnection } from '../utils.js';
+import { launchAndNavigate } from './startup-replay.js';
 import type { RawNavTopology, NavGraphScanResult, NavGraph, NavMethod, GoResult } from '../nav-graph/types.js';
 import {
   findProjectRoot,
@@ -441,8 +442,58 @@ export function createNavGraphHandler(getClient: () => CDPClient) {
     return failResult(result.error);
   });
 
+  const goWithStartupReplay = async (args: NavGraphArgs) => {
+    const result = await goHandler(args);
+
+    if (!args.screen) return result;
+
+    const envelope = JSON.parse(result.content[0].text) as { ok: boolean; data?: GoResult; meta?: { warning?: string } };
+    const isNavRefMissing =
+      (envelope.ok && envelope.meta?.warning?.includes('__NAV_REF__'))
+      || (envelope.ok && envelope.meta?.warning?.includes('Navigation failed'))
+      || (envelope.data && !envelope.data.arrived && envelope.data.method_used === 'programmatic_failed');
+
+    if (!isNavRefMissing) return result;
+
+    const client = getClient();
+    try {
+      const replayResult = await launchAndNavigate(client, args.screen, args.params, {
+        platform: args.platform,
+      });
+
+      if (replayResult.arrived) {
+        const goResult: GoResult = {
+          arrived: true,
+          screen: args.screen,
+          from: null,
+          method_used: 'startup_replay',
+          steps_executed: 1,
+          latency_ms: replayResult.latency_ms,
+          nav_state_after: null,
+          graph_scanned: false,
+          startup_replay: {
+            picker_dismissed: replayResult.picker_dismissed,
+            reconnect_attempts: replayResult.reconnect_attempts,
+          },
+        };
+        const projectRoot = findProjectRoot();
+        if (projectRoot) {
+          recordNavigation(projectRoot, { screen: args.screen, method: 'programmatic', success: true, latency_ms: replayResult.latency_ms });
+        }
+        return warnResult(goResult, `Programmatic navigation failed — recovered via startup replay (${replayResult.latency_ms}ms).`);
+      }
+
+      return warnResult(
+        { ...envelope.data, startup_replay_attempted: true, startup_replay_error: replayResult.error },
+        `Navigation failed. Startup replay also failed: ${replayResult.error}`,
+      );
+    } catch {
+      return result;
+    }
+  };
+
   return async (args: NavGraphArgs) => {
-    if (args.action === 'go') return goHandler(args);
+    if (args.action === 'go') return goWithStartupReplay(args);
     if (args.action === 'scan') return scanHandler(args);
     if (args.action === 'navigate') return navigateHandler(args);
     if (args.action === 'record') return recordHandler(args);
