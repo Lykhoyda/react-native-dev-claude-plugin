@@ -32,6 +32,7 @@ import {
 import { createDevicePermissionHandler } from './tools/device-permission.js';
 import { createNavGraphHandler } from './tools/nav-graph.js';
 import { createDeviceBatchHandler } from './tools/device-batch.js';
+import { stopFastRunner } from './fast-runner-session.js';
 import { instrumentTool, pruneOldTelemetry } from './experience/index.js';
 
 pruneOldTelemetry();
@@ -415,6 +416,7 @@ trackedTool(
 
 process.on('uncaughtException', (err: Error) => {
   console.error('MCP server uncaught exception:', err.message);
+  stopFastRunner();
   process.exit(1);
 });
 
@@ -424,6 +426,7 @@ process.on('unhandledRejection', (reason: unknown) => {
 });
 
 process.on('SIGTERM', () => {
+  stopFastRunner();
   process.exit(0);
 });
 
@@ -434,5 +437,6 @@ async function main() {
 
 main().catch((err) => {
   console.error('MCP server fatal error:', err);
+  stopFastRunner();
   process.exit(1);
 });

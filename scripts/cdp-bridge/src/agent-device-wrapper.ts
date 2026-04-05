@@ -7,6 +7,18 @@ import { homedir } from 'node:os';
 import type { ToolResult } from './utils.js';
 import type { SessionState } from './types.js';
 import { okResult, failResult } from './utils.js';
+import {
+  isFastRunnerAvailable,
+  getFastRunnerState,
+  fastTap,
+  fastType,
+  fastSwipe,
+  fastSnapshot,
+  fastScreenshot,
+  fastDismissKeyboard,
+  startFastRunner,
+} from './fast-runner-session.js';
+import { updateRefMap, refCenter, getScreenRect, hasRefMap, clearRefMap } from './fast-runner-ref-map.js';
 
 const execFile = promisify(execFileCb);
 const SESSION_FILE = '/tmp/rn-dev-agent-session.json';
@@ -107,11 +119,128 @@ export function setActiveSession(info: SessionState): void {
 
 export function clearActiveSession(): void {
   activeSession = null;
+  clearRefMap();
   try { unlinkSync(SESSION_FILE); } catch { /* ignore */ }
 }
 
 export function hasActiveSession(): boolean {
   return activeSession !== null;
+}
+
+// --- Fast-runner dispatch (highest-priority tier for iOS) ---
+
+const SWIPE_DURATION_MS = 300;
+const SCROLL_FRACTION = 0.4;
+const FOCUS_DELAY_MS = 100;
+
+function computeSwipeCoords(direction: string, screen: { width: number; height: number }): { x1: number; y1: number; x2: number; y2: number } | null {
+  const cx = Math.round(screen.width / 2);
+  const cy = Math.round(screen.height / 2);
+  const dy = Math.round(screen.height * SCROLL_FRACTION);
+  const dx = Math.round(screen.width * SCROLL_FRACTION);
+  switch (direction) {
+    case 'down': return { x1: cx, y1: cy + dy, x2: cx, y2: cy - dy };
+    case 'up': return { x1: cx, y1: cy - dy, x2: cx, y2: cy + dy };
+    case 'left': return { x1: cx + dx, y1: cy, x2: cx - dx, y2: cy };
+    case 'right': return { x1: cx - dx, y1: cy, x2: cx + dx, y2: cy };
+    default: return null;
+  }
+}
+
+async function tryFastRunner(command: string, positionals: string[]): Promise<ToolResult | null> {
+  if (!isFastRunnerAvailable()) return null;
+  const state = getFastRunnerState()!;
+
+  try {
+    switch (command) {
+      case 'screenshot': {
+        const pngBuffer = await fastScreenshot();
+        const tmpPath = `/tmp/rn-fast-screenshot-${Date.now()}.png`;
+        writeFileSync(tmpPath, pngBuffer);
+        return okResult({ path: tmpPath, method: 'fast-runner' });
+      }
+      case 'snapshot': {
+        const resp = await fastSnapshot(state.bundleId);
+        if (!resp.ok) return null;
+        return okResult({ ...resp, method: 'fast-runner' });
+      }
+      case 'keyboard': {
+        if (positionals[0] === 'dismiss') {
+          const resp = await fastDismissKeyboard();
+          if (!resp.ok) return null;
+          return okResult({ ...resp, method: 'fast-runner' });
+        }
+        return null;
+      }
+      case 'press': {
+        if (!hasRefMap()) return null;
+        const ref = positionals[0];
+        if (!ref) return null;
+        const center = refCenter(ref);
+        if (!center) return null;
+        const holdMs = positionals.includes('--hold-ms')
+          ? Number(positionals[positionals.indexOf('--hold-ms') + 1]) / 1000
+          : undefined;
+        const resp = await fastTap(center.x, center.y, holdMs);
+        if (!resp.ok) return null;
+        return okResult({ ...resp, ref, method: 'fast-runner' });
+      }
+      case 'fill': {
+        if (!hasRefMap()) return null;
+        const ref = positionals[0];
+        const text = positionals[1];
+        if (!ref || !text) return null;
+        const center = refCenter(ref);
+        if (!center) return null;
+        const tapResp = await fastTap(center.x, center.y);
+        if (!tapResp.ok) return null;
+        await new Promise(r => setTimeout(r, FOCUS_DELAY_MS));
+        const typeResp = await fastType(text);
+        if (!typeResp.ok) return null;
+        return okResult({ filled: true, ref, length: text.length, method: 'fast-runner' });
+      }
+      case 'scroll': {
+        const screen = getScreenRect();
+        if (!screen) return null;
+        const direction = positionals[0];
+        if (!direction) return null;
+        const coords = computeSwipeCoords(direction, screen);
+        if (!coords) return null;
+        const resp = await fastSwipe(coords.x1, coords.y1, coords.x2, coords.y2, SWIPE_DURATION_MS);
+        if (!resp.ok) return null;
+        return okResult({ direction, method: 'fast-runner' });
+      }
+      case 'swipe': {
+        const [x1, y1, x2, y2, durationStr] = positionals;
+        if (x1 == null || y1 == null || x2 == null || y2 == null) return null;
+        const duration = durationStr ? Number(durationStr) : SWIPE_DURATION_MS;
+        const resp = await fastSwipe(Number(x1), Number(y1), Number(x2), Number(y2), duration);
+        if (!resp.ok) return null;
+        return okResult({ method: 'fast-runner' });
+      }
+      case 'longpress': {
+        const [xStr, yStr, durationStr] = positionals;
+        if (xStr == null || yStr == null) return null;
+        const duration = durationStr ? Number(durationStr) / 1000 : 1.0;
+        const resp = await fastTap(Number(xStr), Number(yStr), duration);
+        if (!resp.ok) return null;
+        return okResult({ method: 'fast-runner' });
+      }
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureFastRunner(deviceId: string, bundleId: string): Promise<void> {
+  if (isFastRunnerAvailable()) return;
+  try {
+    await startFastRunner(deviceId, bundleId);
+  } catch (err) {
+    console.error(`Fast runner auto-start failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 interface AgentDeviceJsonSuccess {
@@ -126,18 +255,43 @@ interface AgentDeviceJsonError {
 
 type AgentDeviceJson = AgentDeviceJsonSuccess | AgentDeviceJsonError;
 
+function cacheRefMapFromResult(result: ToolResult): void {
+  try {
+    const envelope = JSON.parse(result.content[0].text) as { ok?: boolean; data?: { nodes?: Array<{ ref: string; rect: { x: number; y: number; width: number; height: number } }> } };
+    if (envelope.ok && envelope.data?.nodes && Array.isArray(envelope.data.nodes)) {
+      updateRefMap(envelope.data.nodes);
+    }
+  } catch { /* not a snapshot response — ignore */ }
+}
+
 export async function runAgentDevice(
   cliArgs: string[],
   opts: { skipSession?: boolean } = {},
 ): Promise<ToolResult> {
   const sessionName = (!opts.skipSession && activeSession) ? activeSession.name : '';
+  const isSnapshotCmd = cliArgs[0] === 'snapshot';
+
+  // Fastest path: XCTest fast-runner HTTP (iOS only, ~5-30ms/op)
+  // Note: fast-runner snapshots return { tree: ... } (nested XCUIElement dict), not { nodes: [...] }
+  // (flat array with @refs). The ref map can only be populated from daemon/CLI snapshots.
+  // So we skip fast-runner for snapshot commands when ref map is empty — force daemon/CLI to populate it.
+  if (sessionName && activeSession?.platform === 'ios') {
+    if (isSnapshotCmd && !hasRefMap()) {
+      // Fall through to daemon/CLI to get a nodes-format snapshot that populates the ref map
+    } else {
+      const fastResult = await tryFastRunner(cliArgs[0], cliArgs.slice(1));
+      if (fastResult) return fastResult;
+    }
+  }
 
   // Fast path: direct daemon socket (eliminates ~300ms CLI spawn)
   if (sessionName && loadDaemonInfo()) {
     const command = cliArgs[0];
     const positionals = cliArgs.slice(1);
     try {
-      return await runViaDaemon(command, positionals, sessionName);
+      const daemonResult = await runViaDaemon(command, positionals, sessionName);
+      if (isSnapshotCmd && !daemonResult.isError) cacheRefMapFromResult(daemonResult);
+      return daemonResult;
     } catch {
       // Daemon unavailable — fall through to CLI
     }
@@ -169,7 +323,9 @@ export async function runAgentDevice(
       );
     }
 
-    return okResult(parsed.data ?? {});
+    const cliResult = okResult(parsed.data ?? {});
+    if (isSnapshotCmd) cacheRefMapFromResult(cliResult);
+    return cliResult;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
 

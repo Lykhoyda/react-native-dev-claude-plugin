@@ -261,7 +261,7 @@ cmd_label() {
 
   # Set up Python with Pillow
   local PYTHON=""
-  local VENV_DIR="${TMPDIR:-/tmp}/rn-dev-agent-pil-venv"
+  local VENV_DIR="/tmp/rn-dev-agent-pil-venv"
 
   if python3 -c "from PIL import Image" 2>/dev/null; then
     PYTHON="python3"

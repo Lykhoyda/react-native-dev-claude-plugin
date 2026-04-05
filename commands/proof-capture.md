@@ -13,8 +13,9 @@ Capture PR proof artifacts for: $ARGUMENTS
 2. Executes the described user flow (or asks you to perform it)
 3. Captures numbered screenshots at each step
 4. Stops recording and converts to GIF (if ffmpeg available)
-5. **Validates the recording** — verifies the feature is actually visible
-6. Writes PROOF.md and generates PR-BODY.md
+5. **Labels the video** — adds a text bar below the video with step descriptions (default)
+6. **Validates the recording** — verifies the feature is actually visible
+7. Writes PROOF.md and generates PR-BODY.md
 
 ## Protocol
 
@@ -83,6 +84,29 @@ Attempt GIF conversion:
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif docs/proof/<slug>/flow-ios.mp4 docs/proof/<slug>/flow-ios.gif
 ```
 
+### Step 5.5: Label the video (default)
+
+Add timed step labels to the recorded video. Build a JSON array mapping each
+step to a time range, then call the label subcommand:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh label \
+  docs/proof/<slug>/flow-ios.mp4 \
+  docs/proof/<slug>/flow-ios-labeled.mp4 \
+  '[{"start":0,"end":5,"text":"Step 1: <description>"},{"start":5,"end":12,"text":"Step 2: <description>"}]'
+```
+
+**How to estimate time ranges:** The recording starts at Step 3 (start recording)
+and each interaction step takes ~3-8 seconds including the settle wait. Use the
+step execution order and count ~5s per step as a rough guide. The labels don't
+need frame-perfect timing — they just need to be close enough that the viewer
+understands what's happening.
+
+If `record_proof.sh label` fails (missing ffmpeg or Pillow), warn but continue —
+the raw video is still usable, labels are a nice-to-have.
+
+The labeled video replaces the raw video as the primary artifact in PROOF.md.
+
 ### Step 6: VALIDATE the recording (CRITICAL)
 
 **Before presenting the video to the user, you MUST verify it captured the
@@ -140,4 +164,5 @@ Show the user:
 
 - iOS Simulator or Android Emulator running with the app loaded
 - Metro dev server running
-- ffmpeg recommended for GIF conversion (`brew install ffmpeg`)
+- ffmpeg required for GIF conversion and video labeling (`brew install ffmpeg`)
+- Pillow auto-installed in a venv for label rendering (no manual setup needed)

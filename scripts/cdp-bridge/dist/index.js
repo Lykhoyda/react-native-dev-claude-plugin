@@ -22,6 +22,7 @@ import { createDeviceFindHandler, createDevicePressHandler, createDeviceFillHand
 import { createDevicePermissionHandler } from './tools/device-permission.js';
 import { createNavGraphHandler } from './tools/nav-graph.js';
 import { createDeviceBatchHandler } from './tools/device-batch.js';
+import { stopFastRunner } from './fast-runner-session.js';
 import { instrumentTool, pruneOldTelemetry } from './experience/index.js';
 pruneOldTelemetry();
 let client = new CDPClient();
@@ -232,6 +233,7 @@ trackedTool('device_batch', 'Execute a sequence of UI interactions in ONE tool c
 }, createDeviceBatchHandler());
 process.on('uncaughtException', (err) => {
     console.error('MCP server uncaught exception:', err.message);
+    stopFastRunner();
     process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
@@ -239,6 +241,7 @@ process.on('unhandledRejection', (reason) => {
     console.error('MCP server unhandled rejection (non-fatal):', msg);
 });
 process.on('SIGTERM', () => {
+    stopFastRunner();
     process.exit(0);
 });
 async function main() {
@@ -247,5 +250,6 @@ async function main() {
 }
 main().catch((err) => {
     console.error('MCP server fatal error:', err);
+    stopFastRunner();
     process.exit(1);
 });

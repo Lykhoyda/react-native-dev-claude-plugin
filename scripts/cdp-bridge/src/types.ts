@@ -94,3 +94,11 @@ export interface SessionState {
   deviceId?: string;
   openedAt: string;
 }
+
+export interface FastRunnerState {
+  port: number;
+  pid: number;
+  deviceId: string;
+  bundleId: string;
+  startedAt: string;
+}

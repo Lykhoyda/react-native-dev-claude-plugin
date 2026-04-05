@@ -3,7 +3,9 @@ import {
   setActiveSession,
   clearActiveSession,
   getActiveSession,
+  ensureFastRunner,
 } from '../agent-device-wrapper.js';
+import { stopFastRunner } from '../fast-runner-session.js';
 import type { ToolResult } from '../utils.js';
 import { okResult, failResult } from '../utils.js';
 
@@ -53,6 +55,10 @@ export function createDeviceSnapshotHandler(): (args: SnapshotArgs) => Promise<T
           deviceId,
           openedAt: new Date().toISOString(),
         });
+
+        if (args.platform === 'ios' && deviceId) {
+          ensureFastRunner(deviceId, args.appId!).catch(() => { /* non-fatal */ });
+        }
       }
 
       return result;
@@ -67,6 +73,7 @@ export function createDeviceSnapshotHandler(): (args: SnapshotArgs) => Promise<T
       const result = await runAgentDevice(['close']);
       if (!result.isError) {
         clearActiveSession();
+        stopFastRunner();
       }
       return result;
     }
