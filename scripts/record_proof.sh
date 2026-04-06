@@ -316,11 +316,11 @@ for l in labels:
     ))
 
 frames = sorted(glob.glob(f"{frames_dir}/frame_*.png"))
-BAR_HEIGHT = 70
+BAR_HEIGHT = 120
 BG_COLOR = (24, 24, 32)
 TEXT_COLOR = (255, 255, 255)
 
-# Try to load a good font
+# Try to load a good font — large size for readability
 font = None
 for fp in [
     "/System/Library/Fonts/Helvetica.ttc",
@@ -329,7 +329,7 @@ for fp in [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]:
     try:
-        font = ImageFont.truetype(fp, 26)
+        font = ImageFont.truetype(fp, 42)
         break
     except:
         continue
