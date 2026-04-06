@@ -275,8 +275,41 @@ export function createNavGraphHandler(getClient) {
             }
         }
         // 4. Execute navigation — single CDP evaluate call
+        // If the plan has a tab switch step, use direct tab+screen navigation (avoids the
+        // fallback-navigate bug where unvisited tabs haven't mounted their nested navigators)
+        const planTabStep = result.plan?.steps?.find(s => s.action === 'switch_tab');
         const paramsArg = args.params ? JSON.stringify(args.params) : 'undefined';
-        const navExpr = `
+        const navExpr = planTabStep
+            ? `
+      (function() {
+        var start = Date.now();
+        var ref = globalThis.__NAV_REF__;
+        if (!ref) return JSON.stringify({ error: '__NAV_REF__ not available', latency_ms: 0 });
+        try {
+          ref.navigate(${JSON.stringify(planTabStep.target_screen)}, { screen: ${JSON.stringify(args.screen)}, params: ${paramsArg} });
+        } catch(e) {
+          return JSON.stringify({ error: 'Tab navigate failed: ' + e.message, latency_ms: Date.now() - start });
+        }
+        var stateResult = __RN_AGENT.getNavState();
+        var state = JSON.parse(stateResult);
+        function getDeepestRoute(s) {
+          if (!s) return null;
+          if (s.nested) return getDeepestRoute(s.nested);
+          return s.routeName || null;
+        }
+        var currentScreen = getDeepestRoute(state);
+        var arrived = currentScreen === ${JSON.stringify(args.screen)};
+        return JSON.stringify({
+          arrived: arrived,
+          current_screen: currentScreen,
+          method: 'plan-tab-navigate',
+          path: [${JSON.stringify(planTabStep.target_screen)}, ${JSON.stringify(args.screen)}],
+          latency_ms: Date.now() - start,
+          nav_state: state
+        });
+      })()
+      `
+            : `
       (function() {
         var start = Date.now();
         var navResult = __RN_AGENT.navigateTo(${JSON.stringify(args.screen)}, ${paramsArg});
