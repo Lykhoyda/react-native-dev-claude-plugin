@@ -26,10 +26,10 @@ redact() {
     2>/dev/null || echo "$input")
   # Strip emails
   input=$(echo "$input" | sed -E 's/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/[EMAIL_REDACTED]/g' 2>/dev/null || echo "$input")
-  # Strip IP addresses (but keep localhost/127.0.0.1)
-  input=$(echo "$input" | sed -E 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/[IP_REDACTED]/g' 2>/dev/null || echo "$input")
-  input="${input//\[IP_REDACTED\]:8081/localhost:8081}"
-  input="${input//\[IP_REDACTED\]:8082/localhost:8082}"
+  # Strip IP addresses (POSIX-compatible, preserve 127.0.0.1 and localhost)
+  input=$(echo "$input" | sed -E 's/(^|[^0-9])(192|10|172|169)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}([^0-9]|$)/\1[IP_REDACTED]\3/g' 2>/dev/null || echo "$input")
+  # Strip absolute paths that aren't home (already handled) — catches stack traces
+  input=$(echo "$input" | sed -E 's#/(Users|home|opt|var|tmp)/[A-Za-z0-9_./-]{10,}#[PATH_REDACTED]#g' 2>/dev/null || echo "$input")
   echo "$input"
 }
 
@@ -105,24 +105,9 @@ if [ -f "$HOME/.maestro-runner/bin/maestro-runner" ]; then
   maestro_runner_version=$("$HOME/.maestro-runner/bin/maestro-runner" --version 2>/dev/null | head -1 || echo "installed, version unknown")
 fi
 
-# --- Output sanitized JSON ---
+# --- Output sanitized JSON via python3 (safe escaping) ---
 
-cat <<ENDJSON
-{
-  "plugin_version": "$plugin_version",
-  "cdp_bridge_version": "$cdp_version",
-  "tool_count": "$tool_count",
-  "environment": {
-    "os": "$os_name $os_version",
-    "node": "$node_version",
-    "npm": "$npm_version",
-    "ios_simulators": "$ios_sim",
-    "android_emulators": "$android_emu",
-    "metro": "$metro_status",
-    "agent_device": "$agent_device_version",
-    "maestro_runner": "$maestro_runner_version"
-  },
-  "recent_telemetry_lines": $(echo "$recent_telemetry" | python3 -c "
+telemetry_json=$(echo "$recent_telemetry" | python3 -c "
 import sys, json
 lines = sys.stdin.read().strip().split('\n')
 events = []
@@ -131,12 +116,42 @@ for line in lines:
         continue
     try:
         e = json.loads(line)
-        # Keep only safe fields
-        safe = {k: e[k] for k in ['ts','event','tool','result','error','latency_ms','phase'] if k in e}
+        safe = {k: e[k] for k in ['ts','event','tool','result','latency_ms','phase'] if k in e}
         events.append(safe)
     except:
         pass
 print(json.dumps(events[-20:]))
 " 2>/dev/null || echo "[]")
+
+python3 -c "
+import json, sys
+data = {
+    'plugin_version': sys.argv[1],
+    'cdp_bridge_version': sys.argv[2],
+    'tool_count': sys.argv[3],
+    'environment': {
+        'os': sys.argv[4],
+        'node': sys.argv[5],
+        'npm': sys.argv[6],
+        'ios_simulators': sys.argv[7],
+        'android_emulators': sys.argv[8],
+        'metro': sys.argv[9],
+        'agent_device': sys.argv[10],
+        'maestro_runner': sys.argv[11],
+    },
+    'recent_telemetry_lines': json.loads(sys.argv[12]),
 }
-ENDJSON
+print(json.dumps(data, indent=2))
+" \
+  "$plugin_version" \
+  "$cdp_version" \
+  "$tool_count" \
+  "$os_name $os_version" \
+  "$node_version" \
+  "$npm_version" \
+  "$ios_sim" \
+  "$android_emu" \
+  "$metro_status" \
+  "$agent_device_version" \
+  "$maestro_runner_version" \
+  "$telemetry_json"

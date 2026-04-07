@@ -72,7 +72,7 @@ export class CDPClient {
 
   bridgeWithFallback(call: string): string {
     return this._bridgeDetected
-      ? `(function() { try { var r = __RN_DEV_BRIDGE__.${call}; var p = JSON.parse(r); if (p && (p.__agent_error || p.error)) return __RN_AGENT.${call}; return r; } catch(e) { return __RN_AGENT.${call}; } })()`
+      ? `(function() { var fb = false; try { var r = __RN_DEV_BRIDGE__.${call}; var p = JSON.parse(r); if (p && (p.__agent_error || p.error)) fb = true; else return r; } catch(e) { fb = true; } if (fb) return __RN_AGENT.${call}; })()`
       : `__RN_AGENT.${call}`;
   }
 

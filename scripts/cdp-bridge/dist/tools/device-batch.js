@@ -88,11 +88,19 @@ export function createDeviceBatchHandler() {
         for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
             const stepStart = Date.now();
+            // Note: timed-out steps continue executing in background (agent-device CLI
+            // calls cannot be cancelled). The timeout prevents the batch from hanging,
+            // but the underlying action may complete after the timeout fires.
             const STEP_TIMEOUT = 15_000;
+            let stepTimer;
             const result = await Promise.race([
                 executeStep(step),
-                new Promise((resolve) => setTimeout(() => resolve(failResult(`Step ${i + 1} timed out after ${STEP_TIMEOUT}ms`)), STEP_TIMEOUT)),
+                new Promise((resolve) => {
+                    stepTimer = setTimeout(() => resolve(failResult(`Step ${i + 1} timed out after ${STEP_TIMEOUT}ms`)), STEP_TIMEOUT);
+                }),
             ]);
+            if (stepTimer)
+                clearTimeout(stepTimer);
             const success = isOk(result);
             const durationMs = Date.now() - stepStart;
             const stepResult = {
