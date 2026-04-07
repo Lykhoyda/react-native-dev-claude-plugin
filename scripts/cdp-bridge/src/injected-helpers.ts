@@ -742,7 +742,6 @@ export const INJECTED_HELPERS = `
       return JSON.stringify({ error: 'React DevTools hook not available or no fiber roots — app may still be loading' });
     }
 
-    var root = renderer.roots.values().next().value;
     var found = null;
     var findCount = 0;
 
@@ -750,7 +749,7 @@ export const INJECTED_HELPERS = `
       var current = fiber;
       while (current) {
         findCount++;
-        if (findCount > 5000) return;
+        if (findCount > 8000) return;
         var props = current.memoizedProps;
         if (props && props[matchField] === selector) {
           found = current;
@@ -762,7 +761,9 @@ export const INJECTED_HELPERS = `
       }
     }
 
-    findFiber(root.current);
+    renderer.roots.forEach(function(root) {
+      if (!found && root && root.current) findFiber(root.current);
+    });
 
     if (!found) {
       return JSON.stringify({
@@ -821,6 +822,14 @@ export const INJECTED_HELPERS = `
         }
 
         return JSON.stringify({ error: 'Component has no scrollTo method or onScroll handler', component: typeName, testID: selector });
+      }
+
+      if (action === 'longPress') {
+        if (typeof props.onLongPress !== 'function') {
+          return JSON.stringify({ error: 'Component has no onLongPress handler', component: typeName, testID: selector });
+        }
+        props.onLongPress({ nativeEvent: {} });
+        return JSON.stringify({ success: true, action: 'longPress', component: typeName, testID: selector });
       }
 
       return JSON.stringify({ error: 'Unknown action: ' + action });

@@ -114,7 +114,13 @@ export function createDeviceBatchHandler(): (args: BatchArgs) => Promise<ToolRes
       const step = steps[i];
       const stepStart = Date.now();
 
-      const result = await executeStep(step);
+      const STEP_TIMEOUT = 15_000;
+      const result = await Promise.race([
+        executeStep(step),
+        new Promise<ToolResult>((resolve) =>
+          setTimeout(() => resolve(failResult(`Step ${i + 1} timed out after ${STEP_TIMEOUT}ms`)), STEP_TIMEOUT),
+        ),
+      ]);
       const success = isOk(result);
       const durationMs = Date.now() - stepStart;
 

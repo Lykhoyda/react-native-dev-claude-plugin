@@ -36,7 +36,7 @@ const setClient = (c) => { client = c; };
 const createClient = (port) => new CDPClient(port);
 const server = new McpServer({
     name: 'rn-dev-agent-cdp',
-    version: '0.7.0',
+    version: '0.7.1',
 });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function trackedTool(name, desc, schema, handler) {
@@ -140,8 +140,8 @@ trackedTool('cdp_dev_settings', 'Control React Native dev settings programmatica
     action: z.enum(['reload', 'toggleInspector', 'togglePerfMonitor', 'dismissRedBox', 'disableDevMenu'])
         .describe('Dev menu action to execute'),
 }, createDevSettingsHandler(getClient));
-trackedTool('cdp_interact', 'Interact with React components by testID — press buttons, type text, scroll. Calls JS handlers directly (not native touch). Reliable for all React-level interactions. For native gestures (swipe, drag), use device_swipe/device_press instead.', {
-    action: z.enum(['press', 'typeText', 'scroll']).describe('press: calls onPress. typeText: calls onChangeText. scroll: calls scrollTo or onScroll.'),
+trackedTool('cdp_interact', 'Interact with React components by testID — press buttons, long-press, type text, scroll. Calls JS handlers directly (not native touch). Reliable for all React-level interactions including elements inside gesture handlers. For native gestures (swipe, drag), use device_swipe/device_press instead.', {
+    action: z.enum(['press', 'longPress', 'typeText', 'scroll']).describe('press: calls onPress. longPress: calls onLongPress. typeText: calls onChangeText. scroll: calls scrollTo or onScroll.'),
     testID: z.string().optional().describe('testID prop of the target component'),
     accessibilityLabel: z.string().optional().describe('accessibilityLabel prop (used if testID not provided)'),
     text: z.string().optional().describe('Required for typeText: the text to enter'),

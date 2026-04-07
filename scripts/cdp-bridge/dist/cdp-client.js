@@ -40,7 +40,7 @@ export class CDPClient {
         this._networkBuffer = new RingBuffer(100);
     }
     get state() { return this._state; }
-    get isConnected() { return this._state === 'connected' && this.ws?.readyState === WebSocket.OPEN; }
+    get isConnected() { return !this.disposed && this._state === 'connected' && this.ws?.readyState === WebSocket.OPEN; }
     get isPaused() { return this._isPaused; }
     get helpersInjected() { return this._helpersInjected; }
     get metroPort() { return this._port; }
@@ -706,7 +706,11 @@ export class CDPClient {
             }, ms);
             this.pending.set(id, { resolve: resolve, reject, timer });
             try {
-                this.ws.send(JSON.stringify({ id, method, params }));
+                const ws = this.ws;
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    throw new Error('WebSocket closed between check and send');
+                }
+                ws.send(JSON.stringify({ id, method, params }));
             }
             catch (err) {
                 clearTimeout(timer);

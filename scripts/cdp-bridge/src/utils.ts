@@ -81,10 +81,12 @@ export function withConnection<T>(
       // after bridgeless navigation. Cheaper than failing + softReconnect (D490).
       if (requireHelpers && client.helpersInjected) {
         try {
+          let probeTimer: ReturnType<typeof setTimeout> | undefined;
           const vCheck = await Promise.race([
             client.evaluate('typeof globalThis.__RN_AGENT === "object" && globalThis.__RN_AGENT.__v'),
-            new Promise<EvaluateResult>((res) => setTimeout(() => res({ error: 'timeout' }), 2000)),
+            new Promise<EvaluateResult>((res) => { probeTimer = setTimeout(() => res({ error: 'timeout' }), 2000); }),
           ]);
+          if (probeTimer) clearTimeout(probeTimer);
           if (vCheck.error || typeof vCheck.value !== 'number') {
             console.error('CDP: helpers stale (globals missing), re-injecting...');
             const reinjected = await client.reinjectHelpers();
@@ -129,10 +131,12 @@ export function withConnection<T>(
       // Path B (B58 fix): Stale-target probe — WS is open but JS context may be dead
       if (client.isConnected) {
         try {
+          let staleTimer: ReturnType<typeof setTimeout> | undefined;
           const probe = await Promise.race([
             client.evaluate('typeof __DEV__ !== "undefined" && __DEV__ === true'),
-            new Promise<EvaluateResult>((res) => setTimeout(() => res({ error: 'probe timeout' }), 2000)),
+            new Promise<EvaluateResult>((res) => { staleTimer = setTimeout(() => res({ error: 'probe timeout' }), 2000); }),
           ]);
+          if (staleTimer) clearTimeout(staleTimer);
           const isStale = probe.error !== undefined || probe.value !== true;
           if (isStale) {
             console.error('CDP: stale target detected, re-discovering...');
