@@ -132,14 +132,25 @@ export function withConnection<T>(
       if (client.isConnected) {
         try {
           let staleTimer: ReturnType<typeof setTimeout> | undefined;
-          const probe = await Promise.race([
+          let probe = await Promise.race([
             client.evaluate('typeof __DEV__ !== "undefined" && __DEV__ === true'),
             new Promise<EvaluateResult>((res) => { staleTimer = setTimeout(() => res({ error: 'probe timeout' }), 2000); }),
           ]);
           if (staleTimer) clearTimeout(staleTimer);
-          const isStale = probe.error !== undefined || probe.value !== true;
+          let isStale = probe.error !== undefined || probe.value !== true;
+          // D526: Retry once to avoid false positives from GC pauses / transient blocks
+          if (isStale && probe.error === 'probe timeout') {
+            await new Promise(r => setTimeout(r, 500));
+            let retryTimer: ReturnType<typeof setTimeout> | undefined;
+            probe = await Promise.race([
+              client.evaluate('typeof __DEV__ !== "undefined" && __DEV__ === true'),
+              new Promise<EvaluateResult>((res) => { retryTimer = setTimeout(() => res({ error: 'probe timeout' }), 3000); }),
+            ]);
+            if (retryTimer) clearTimeout(retryTimer);
+            isStale = probe.error !== undefined || probe.value !== true;
+          }
           if (isStale) {
-            console.error('CDP: stale target detected, re-discovering...');
+            console.error('CDP: stale target detected (confirmed after retry), re-discovering...');
             try {
               await client.softReconnect();
               if (requireHelpers && !client.helpersInjected) {

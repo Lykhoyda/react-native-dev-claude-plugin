@@ -2,9 +2,10 @@ import { okResult, failResult, warnResult } from '../utils.js';
 import { handleDevClientPicker } from './dev-client-picker.js';
 const STATUS_PROBE_EXPRESSION = `
 (function() {
-  var result = { appInfo: null, errorCount: 0, fiberTree: false, hasRedBox: false };
+  var result = { appInfo: null, errorCount: 0, fiberTree: false, hasRedBox: false, helpersLoaded: false };
   var agent = globalThis.__RN_AGENT;
   if (!agent) return JSON.stringify(result);
+  result.helpersLoaded = true;
   try { result.appInfo = JSON.parse(agent.getAppInfo()); } catch(e) {}
   try { result.errorCount = JSON.parse(agent.getErrors()).length; } catch(e) {}
   try { result.fiberTree = agent.isReady(); } catch(e) {}
@@ -22,10 +23,12 @@ async function buildStatusResult(client) {
         if (probeResult.value && typeof probeResult.value === 'string') {
             try {
                 const probe = JSON.parse(probeResult.value);
-                appInfo = probe.appInfo;
-                errorCount = probe.errorCount;
-                fiberTree = probe.fiberTree;
-                hasRedBox = probe.hasRedBox;
+                if (probe.helpersLoaded) {
+                    appInfo = probe.appInfo;
+                    errorCount = probe.errorCount;
+                    fiberTree = probe.fiberTree;
+                    hasRedBox = probe.hasRedBox;
+                }
             }
             catch { /* probe failed */ }
         }

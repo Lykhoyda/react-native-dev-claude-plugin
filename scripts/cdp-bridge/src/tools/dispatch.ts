@@ -8,11 +8,7 @@ export function createDispatchHandler(getClient: () => CDPClient) {
       payload: args.payload,
       readPath: args.readPath,
     });
-    const expression = client.bridgeDetected
-      ? `__RN_DEV_BRIDGE__.dispatchAction(${opts})`
-      : `__RN_AGENT.dispatchAction(${opts})`;
-
-    const result = await client.evaluate(expression);
+    const result = await client.evaluate(client.helperExpr(`dispatchAction(${opts})`));
 
     if (result.error) {
       return failResult(`Dispatch error: ${result.error}`);

@@ -17,6 +17,7 @@ const DEFAULT_PORTS = [8081, 8082, 19000, 19006];
 export class CDPClient {
     ws = null;
     msgId = 0;
+    slotId = 0;
     pending = new Map();
     eventHandlers = new Map();
     _consoleBuffer;
@@ -51,6 +52,14 @@ export class CDPClient {
     get connectionGeneration() { return this._connectionGeneration; }
     get bridgeDetected() { return this._bridgeDetected; }
     get bridgeVersion() { return this._bridgeVersion; }
+    helperExpr(call) {
+        return this._bridgeDetected ? `__RN_DEV_BRIDGE__.${call}` : `__RN_AGENT.${call}`;
+    }
+    bridgeWithFallback(call) {
+        return this._bridgeDetected
+            ? `(function() { try { var r = __RN_DEV_BRIDGE__.${call}; var p = JSON.parse(r); if (p && (p.__agent_error || p.error)) return __RN_AGENT.${call}; return r; } catch(e) { return __RN_AGENT.${call}; } })()`
+            : `__RN_AGENT.${call}`;
+    }
     setActiveFlag() {
         try {
             writeFileSync(CDP_ACTIVE_FLAG, String(process.pid));
@@ -302,7 +311,7 @@ export class CDPClient {
         // Hermes CDP doesn't support awaitPromise — use global slot + polling
         // Values are JSON-serialized inside Hermes to handle non-serializable objects
         // A deferred cleanup timer ensures the slot is removed even if the caller times out
-        const slot = '__rn_agent_async_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const slot = '__rn_agent_async_' + (++this.slotId) + '_' + Date.now();
         const ASYNC_CLEANUP_MS = CDP_TIMEOUT_MS * 2;
         const wrapper = `(function() {
       function safeVal(v) {
@@ -353,7 +362,11 @@ export class CDPClient {
             }
             await this.sleep(100);
         }
-        // Slot cleanup is handled by the deferred timer inside Hermes
+        // Proactive cleanup — don't rely solely on the Hermes deferred timer
+        void this.sendWithTimeout('Runtime.evaluate', {
+            expression: `delete globalThis['${slot}']`,
+            returnByValue: true,
+        }, 1000).catch(() => { });
         return { error: 'Promise did not resolve within ' + CDP_TIMEOUT_MS + 'ms' };
     }
     async send(method, params) {
@@ -492,8 +505,8 @@ export class CDPClient {
                 }
             }
         }
-        catch {
-            // Malformed hook message, ignore
+        catch (err) {
+            console.error('CDP: malformed network hook message dropped:', typeof firstArg === 'string' ? firstArg.slice(0, 100) : typeof firstArg, err instanceof Error ? err.message : '');
         }
     }
     async setup() {

@@ -3,10 +3,7 @@ import { okResult, failResult, withConnection } from '../utils.js';
 
 export function createNavigationStateHandler(getClient: () => CDPClient) {
   return withConnection(getClient, async (_args: Record<string, never>, client) => {
-    const expr = client.bridgeDetected
-      ? '__RN_DEV_BRIDGE__.getNavState()'
-      : '__RN_AGENT.getNavState()';
-    const result = await client.evaluate(expr);
+    const result = await client.evaluate(client.helperExpr('getNavState()'));
 
     if (result.error) {
       return failResult(`Navigation state error: ${result.error}`);

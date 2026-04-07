@@ -2,8 +2,7 @@ import { okResult, failResult, withConnection } from '../utils.js';
 export function createConsoleLogHandler(getClient) {
     return withConnection(getClient, async (args, client) => {
         if (args.clear) {
-            const clearExpr = client.bridgeDetected ? '__RN_DEV_BRIDGE__.clearConsole()' : '__RN_AGENT.clearConsole()';
-            const clearResult = await client.evaluate(clearExpr);
+            const clearResult = await client.evaluate(client.helperExpr('clearConsole()'));
             if (clearResult.error) {
                 return failResult(`Failed to clear console: ${clearResult.error}`);
             }
@@ -11,10 +10,8 @@ export function createConsoleLogHandler(getClient) {
         }
         const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
         const level = args.level ?? 'all';
-        const getExpr = client.bridgeDetected
-            ? `__RN_DEV_BRIDGE__.getConsole(${JSON.stringify({ level, limit })})`
-            : `__RN_AGENT.getConsole(${JSON.stringify({ level, limit })})`;
-        const result = await client.evaluate(getExpr);
+        const opts = JSON.stringify({ level, limit });
+        const result = await client.evaluate(client.helperExpr(`getConsole(${opts})`));
         if (result.error) {
             return failResult(`Console log error: ${result.error}`);
         }
