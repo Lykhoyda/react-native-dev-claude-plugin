@@ -179,7 +179,8 @@ export const INJECTED_HELPERS = `
       var queue = [root.current];
       var seen = new WeakSet();
       var scanned = 0;
-      while (queue.length > 0 && scanned < 2000) {
+      var bfsStart = Date.now();
+      while (queue.length > 0 && scanned < 2000 && (Date.now() - bfsStart) < 3000) {
         var fiber = queue.shift();
         if (!fiber || seen.has(fiber)) continue;
         seen.add(fiber);

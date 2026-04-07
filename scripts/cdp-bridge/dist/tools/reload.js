@@ -31,12 +31,20 @@ export function createReloadHandler(getClient) {
             await new Promise(r => setTimeout(r, 200));
         }
         // Step 3 (B61 fix): Always do full target re-discovery after reload.
-        // Retry up to 3 times — new Hermes target may not be registered with Metro immediately.
+        // Retry up to 3 times with 15s absolute deadline — softReconnect can stall on network issues.
         let reconnected = false;
         let lastReconnErr = '';
+        const reconnectDeadline = Date.now() + 15_000;
         for (let attempt = 0; attempt < 3; attempt++) {
+            if (Date.now() > reconnectDeadline) {
+                lastReconnErr = 'Reconnect deadline exceeded (15s)';
+                break;
+            }
             try {
-                await client.softReconnect();
+                await Promise.race([
+                    client.softReconnect(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('softReconnect timeout')), Math.max(reconnectDeadline - Date.now(), 1000))),
+                ]);
                 reconnected = true;
                 break;
             }
