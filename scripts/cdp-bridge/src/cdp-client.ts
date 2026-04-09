@@ -18,6 +18,7 @@ import type {
 } from './types.js';
 
 const CDP_ACTIVE_FLAG = join(tmpdir(), 'rn-dev-agent-cdp-active');
+const CDP_SESSION_FILE = join(tmpdir(), 'rn-dev-agent-cdp-session.json');
 const CDP_TIMEOUT_MS = 5000;
 const REACT_READY_TIMEOUT_MS = 30000;
 const REACT_READY_POLL_MS = 500;
@@ -25,7 +26,11 @@ const RECONNECT_DELAY_MS = 1500;
 const RECONNECT_ATTEMPTS = 30;
 const RECONNECT_RETRY_MS = 1500;
 const DISCOVERY_TIMEOUT_MS = 1500;
-const DEFAULT_PORTS = [8081, 8082, 19000, 19006];
+const USER_METRO_PORT = process.env.RN_METRO_PORT ? parseInt(process.env.RN_METRO_PORT, 10) : null;
+const DEFAULT_PORTS = [
+  ...(USER_METRO_PORT && !isNaN(USER_METRO_PORT) ? [USER_METRO_PORT] : []),
+  8081, 8082, 19000, 19006,
+];
 
 export class CDPClient {
   private ws: WebSocket | null = null;
@@ -80,10 +85,20 @@ export class CDPClient {
 
   private setActiveFlag(): void {
     try { writeFileSync(CDP_ACTIVE_FLAG, String(process.pid)); } catch { /* best-effort */ }
+    try {
+      writeFileSync(CDP_SESSION_FILE, JSON.stringify({
+        port: this._port,
+        platform: this._connectedTarget?.platform ?? null,
+        target: this._connectedTarget?.title ?? null,
+        pid: process.pid,
+        connectedAt: new Date().toISOString(),
+      }));
+    } catch { /* best-effort */ }
   }
 
   private clearActiveFlag(): void {
     try { unlinkSync(CDP_ACTIVE_FLAG); } catch { /* may not exist */ }
+    try { unlinkSync(CDP_SESSION_FILE); } catch { /* may not exist */ }
   }
 
   async reinjectHelpers(waitTimeout?: number): Promise<boolean> {
@@ -113,7 +128,11 @@ export class CDPClient {
     if (this.disposed) {
       throw new Error('Client is disposed. Create a new CDPClient instance.');
     }
-    return this.discoverAndConnect(portHint, platformFilter);
+    const effectivePlatform = platformFilter
+      ?? (process.env.RN_PREFERRED_PLATFORM && process.env.RN_PREFERRED_PLATFORM !== 'auto'
+        ? process.env.RN_PREFERRED_PLATFORM
+        : undefined);
+    return this.discoverAndConnect(portHint, effectivePlatform);
   }
 
   private inferPlatforms(targets: HermesTarget[]): void {

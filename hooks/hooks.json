@@ -1,5 +1,5 @@
 {
-  "description": "RN project detection on session start + post-edit health check on simulator",
+  "description": "RN project detection, post-edit health check, CWD re-detection, and subagent CDP context injection",
   "hooks": {
     "SessionStart": [
       {
@@ -20,6 +20,28 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-edit-health-check.sh",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/cwd-changed.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start.sh"
           }
         ]
       }

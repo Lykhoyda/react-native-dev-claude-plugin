@@ -3,6 +3,9 @@
 # Checks for app crashes and compilation errors after RN source file edits.
 # Uses last-write-wins debounce: only the most recent edit triggers the check.
 #
+# Exit codes: 0 = success (output shown to agent), 1 = error (logged, non-blocking),
+#             2 = block operation (prevents the hooked action — not used here).
+#
 # Skips when: no active CDP session (rn-dev-agent not in use), file is outside
 # an RN project, no simulator/emulator running, Metro not running.
 # Silent exit on all skip paths — never outputs messages that could trigger

@@ -26,6 +26,7 @@ description: |
   </example>
 tools: Glob, Grep, LS, Read
 model: opus
+effort: high
 skills: rn-testing, rn-best-practices
 color: green
 ---

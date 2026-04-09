@@ -1,5 +1,6 @@
 ---
 name: rn-best-practices
+user-invocable: false
 description: >
   React Native and Expo best practices for building performant mobile apps. Use
   when reviewing React Native code, designing component architecture, implementing

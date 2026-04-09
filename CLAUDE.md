@@ -62,9 +62,11 @@ rn-dev-agent/
 │   ├── debug-screen.md               # Diagnose and fix current screen
 │   └── check-env.md                  # Verify environment readiness
 ├── hooks/
-│   ├── hooks.json                    # SessionStart + PostToolUse hook config
-│   ├── detect-rn-project.sh          # Auto-detect RN projects + install maestro-runner + agent-device
-│   └── post-edit-health-check.sh     # PostToolUse: checks simulator for crashes after source file edits
+│   ├── hooks.json                    # 4 hook events: SessionStart, PostToolUse, CwdChanged, SubagentStart
+│   ├── detect-rn-project.sh          # SessionStart: auto-detect RN projects + install deps
+│   ├── post-edit-health-check.sh     # PostToolUse: checks simulator for crashes after source file edits
+│   ├── cwd-changed.sh               # CwdChanged: re-detect RN project on directory change
+│   └── subagent-start.sh            # SubagentStart: inject CDP connection status for subagents
 └── scripts/
     ├── cdp-bridge/                   # MCP server (TypeScript)
     │   ├── src/

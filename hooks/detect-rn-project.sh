@@ -1,7 +1,8 @@
 #!/bin/bash
 # detect-rn-project.sh — SessionStart hook
 # Checks if the current directory is a React Native project and outputs a hint message.
-# Exit 0 with output = show message. Exit 0 with no output = silent skip.
+# Exit codes: 0 = success (output shown to agent), 1 = error (logged, non-blocking),
+#             2 = block operation (prevents the hooked action — not used here).
 
 # Check for react-native or expo in package.json dependencies (not just generic config files)
 if [ ! -f "package.json" ]; then
