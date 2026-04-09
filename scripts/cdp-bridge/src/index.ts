@@ -112,7 +112,7 @@ trackedTool(
 
 trackedTool(
   'cdp_reload',
-  'Trigger a full reload of the app. Auto-reconnects to the new Hermes target (waits up to 15s). Returns when app is ready for queries again.',
+  'Trigger a full reload of the app. Auto-reconnects to the new Hermes target (waits up to 30s with 5 retries). After Dev Client rebuilds, the app may need a manual restart (xcrun simctl terminate + launch) if reconnect fails.',
   {
     full: z.boolean().default(true).describe('Always performs a full reload via DevSettings.reload()'),
   },
@@ -238,7 +238,7 @@ trackedTool(
 
 trackedTool(
   'cdp_dispatch',
-  'Dispatch a Redux action and optionally read state afterward — all in a single synchronous JS execution. Use for atomic dispatch+verify operations (e.g. dispatch "tasks/softDelete" then read "tasks.pendingDelete"). Avoids MCP round-trip timing issues.',
+  'Dispatch a Redux action and optionally read state afterward — all in a single synchronous JS execution. Use for atomic dispatch+verify operations (e.g. dispatch "tasks/softDelete" then read "tasks.pendingDelete"). NOTE: Best used for state verification, not UI interaction testing — React components may not re-render immediately after CDP-dispatched actions. For UI testing, use device_press/device_find to trigger the action through the UI instead.',
   {
     action: z.string().describe('Redux action type (e.g. "tasks/softDelete", "cart/addItem")'),
     payload: z.any().optional().describe('Action payload'),
@@ -324,7 +324,7 @@ trackedTool(
 
 trackedTool(
   'device_find',
-  'Find a UI element by visible text and optionally interact with it. Use action="click" to tap, omit for find-only. Returns element ref for use with device_press/device_fill. Requires an open session (call device_snapshot action=open first).',
+  'Find a UI element by visible text and optionally interact with it. Use action="click" to tap, omit for find-only. Returns element ref for use with device_press/device_fill. Requires an open session (call device_snapshot action=open first). If AMBIGUOUS_MATCH error occurs (common text like "Next", "Done"), use device_snapshot to get the accessibility tree and device_press with the specific @ref instead.',
   {
     text: z.string().describe('Visible text, accessibility label, or identifier to find'),
     action: z.string().optional().describe('Action to perform: "click" to tap, omit for search-only'),

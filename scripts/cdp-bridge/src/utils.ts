@@ -44,8 +44,8 @@ export function withConnection<T>(
         } catch (connectErr) {
           const msg = connectErr instanceof Error ? connectErr.message : String(connectErr);
           if (msg.includes('Already connecting')) {
-            // Reconnection in progress — wait up to 15s for it to complete
-            const deadline = Date.now() + 15_000;
+            // Reconnection in progress — wait up to 30s for it to complete (B89)
+            const deadline = Date.now() + 30_000;
             while (!client.isConnected && Date.now() < deadline) {
               await new Promise(r => setTimeout(r, 500));
             }
@@ -67,7 +67,7 @@ export function withConnection<T>(
           const pickerResult = await handleDevClientPicker();
           if (pickerResult?.dismissed) {
             console.error('CDP: Dev Client picker dismissed, waiting for helpers...');
-            const extDeadline = Date.now() + 15_000;
+            const extDeadline = Date.now() + 30_000;
             while (!client.helpersInjected && Date.now() < extDeadline) {
               await new Promise(r => setTimeout(r, 500));
             }
@@ -140,7 +140,7 @@ export function withConnection<T>(
 
       if (isDisconnect) {
         // Path A: Clean disconnect — wait for auto-reconnect, then retry once
-        const retryDeadline = Date.now() + 15_000;
+        const retryDeadline = Date.now() + 30_000;
         while (!client.isConnected && Date.now() < retryDeadline) {
           await new Promise(r => setTimeout(r, 500));
         }

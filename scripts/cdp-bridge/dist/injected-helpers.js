@@ -1,6 +1,6 @@
 export const INJECTED_HELPERS = `
 (function() {
-  var __HELPERS_VERSION__ = 11;
+  var __HELPERS_VERSION__ = 12;
   if (globalThis.__RN_AGENT && globalThis.__RN_AGENT.__v === __HELPERS_VERSION__) return;
   if (globalThis.__RN_AGENT) delete globalThis.__RN_AGENT;
 
@@ -540,8 +540,34 @@ export const INJECTED_HELPERS = `
     var state = null;
     var storeType = null;
 
+    // B91 fix: Try fiber-walked store FIRST for Redux, then fall back to global.
+    // After Dev Client rebuilds, __REDUX_STORE__ may reference the old store instance
+    // while the fiber tree always reflects the current React context.
     if (!requestedType || requestedType === 'redux') {
-      if (globalThis.__REDUX_STORE__ && globalThis.__REDUX_STORE__.getState) {
+      var storeRenderer = findActiveRenderer();
+      if (storeRenderer) {
+        var fiberRoot = storeRenderer.roots.values().next().value;
+        function findFiberReduxStore(fiber, depth) {
+          var current = fiber;
+          while (current) {
+            if ((depth || 0) > 30) return null;
+            var name = current.type && (current.type.displayName || current.type.name);
+            if (name === 'Provider' && current.memoizedProps && current.memoizedProps.store && current.memoizedProps.store.getState) {
+              return current.memoizedProps.store;
+            }
+            var found = findFiberReduxStore(current.child, (depth || 0) + 1);
+            if (found) return found;
+            current = current.sibling;
+          }
+          return null;
+        }
+        var fiberStore = findFiberReduxStore(fiberRoot && fiberRoot.current);
+        if (fiberStore) {
+          state = fiberStore.getState();
+          storeType = 'redux';
+        }
+      }
+      if (!state && globalThis.__REDUX_STORE__ && globalThis.__REDUX_STORE__.getState) {
         state = globalThis.__REDUX_STORE__.getState();
         storeType = 'redux';
       }
@@ -853,30 +879,31 @@ export const INJECTED_HELPERS = `
 
     if (!actionType) return JSON.stringify({ __agent_error: 'action is required (e.g. "tasks/softDelete")' });
 
+    // B90 fix: Prefer fiber-walked store over __REDUX_STORE__ global.
+    // After Dev Client rebuilds, the global may reference the OLD store instance
+    // while the fiber tree always reflects the CURRENT React context.
     var store = null;
-    if (globalThis.__REDUX_STORE__ && globalThis.__REDUX_STORE__.dispatch) {
-      store = globalThis.__REDUX_STORE__;
+    var storeRenderer = findActiveRenderer();
+    if (storeRenderer) {
+      var storeRoot = storeRenderer.roots.values().next().value;
+      function findDispatchStore(fiber, depth) {
+        var current = fiber;
+        while (current) {
+          if ((depth || 0) > 30) return null;
+          if (current.type && current.type.displayName === 'Provider' && current.memoizedProps && current.memoizedProps.store && current.memoizedProps.store.dispatch) {
+            return current.memoizedProps.store;
+          }
+          var found = findDispatchStore(current.child, (depth || 0) + 1);
+          if (found) return found;
+          current = current.sibling;
+        }
+        return null;
+      }
+      store = findDispatchStore(storeRoot && storeRoot.current);
     }
 
-    if (!store) {
-      var storeRenderer = findActiveRenderer();
-      if (storeRenderer) {
-        var storeRoot = storeRenderer.roots.values().next().value;
-        function findDispatchStore(fiber, depth) {
-          var current = fiber;
-          while (current) {
-            if ((depth || 0) > 30) return null;
-            if (current.type && current.type.displayName === 'Provider' && current.memoizedProps && current.memoizedProps.store && current.memoizedProps.store.dispatch) {
-              return current.memoizedProps.store;
-            }
-            var found = findDispatchStore(current.child, (depth || 0) + 1);
-            if (found) return found;
-            current = current.sibling;
-          }
-          return null;
-        }
-        store = findDispatchStore(storeRoot && storeRoot.current);
-      }
+    if (!store && globalThis.__REDUX_STORE__ && globalThis.__REDUX_STORE__.dispatch) {
+      store = globalThis.__REDUX_STORE__;
     }
 
     if (!store) {
