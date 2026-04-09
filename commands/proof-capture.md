@@ -50,10 +50,10 @@ Detect the platform and start recording:
 
 ```bash
 # iOS
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start ios docs/proof/<slug>/flow-ios.mp4
+rn-record-proof start ios docs/proof/<slug>/flow-ios.mp4
 
 # Android
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start android docs/proof/<slug>/flow-android.mp4
+rn-record-proof start android docs/proof/<slug>/flow-android.mp4
 ```
 
 If recording fails to start, warn but continue — screenshots are the primary artifact.
@@ -76,12 +76,12 @@ If no flow description was provided, ask the user to describe the steps.
 ### Step 5: Stop recording
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh stop
+rn-record-proof stop
 ```
 
 Attempt GIF conversion:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif docs/proof/<slug>/flow-ios.mp4 docs/proof/<slug>/flow-ios.gif
+rn-record-proof convert-gif docs/proof/<slug>/flow-ios.mp4 docs/proof/<slug>/flow-ios.gif
 ```
 
 ### Step 5.5: Label the video (default)
@@ -90,7 +90,7 @@ Add timed step labels to the recorded video. Build a JSON array mapping each
 step to a time range, then call the label subcommand:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh label \
+rn-record-proof label \
   docs/proof/<slug>/flow-ios.mp4 \
   docs/proof/<slug>/flow-ios-labeled.mp4 \
   '[{"start":0,"end":5,"text":"Step 1: <description>"},{"start":5,"end":12,"text":"Step 2: <description>"}]'
@@ -146,7 +146,7 @@ Create `docs/proof/<slug>/PROOF.md` with the standard format:
 ### Step 8: Generate PR body
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/generate_pr_body.sh docs/proof/<slug>/
+rn-generate-pr-body docs/proof/<slug>/
 ```
 
 ### Step 9: Present results

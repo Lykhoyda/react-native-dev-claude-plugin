@@ -35,6 +35,7 @@ description: |
   </example>
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 model: opus
+memory: true
 color: red
 skills: rn-device-control, rn-testing, rn-debugging
 ---
@@ -63,17 +64,17 @@ Replace all placeholder values (`com.example.app`, `YourApp`, `<app-bundle-id>`)
 If the app is not installed on the simulator/emulator:
 - **For EAS builds** (user mentions EAS, preview, or internal build):
   ```bash
-  RESULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/eas_resolve_artifact.sh <platform> [profile]) || EXIT_CODE=$?
+  RESULT=$(rn-eas-artifact <platform> [profile]) || EXIT_CODE=$?
   EXIT_CODE="${EXIT_CODE:-0}"
   if [ "$EXIT_CODE" -eq 0 ]; then
     ARTIFACT=$(echo "$RESULT" | jq -r '.path' 2>/dev/null) || \
       ARTIFACT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).path)" <<< "$RESULT")
-    bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform> --artifact "$ARTIFACT"
+    rn-ensure-running <platform> --artifact "$ARTIFACT"
   fi
   ```
 - **For local dev builds** (default):
   ```bash
-  bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform>
+  rn-ensure-running <platform>
   ```
 See the `rn-device-control` skill (Expo/EAS Build Integration section) for
 details on exit code handling (2=ambiguous profiles, 3=no eas-cli, 4=no eas.json).

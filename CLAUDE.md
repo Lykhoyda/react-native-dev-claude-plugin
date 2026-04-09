@@ -61,12 +61,20 @@ rn-dev-agent/
 │   ├── build-and-test.md             # Build app, then test
 │   ├── debug-screen.md               # Diagnose and fix current screen
 │   └── check-env.md                  # Verify environment readiness
+├── bin/                                # Symlinks added to PATH when plugin is active
+│   ├── rn-ensure-running             # → scripts/expo_ensure_running.sh
+│   ├── rn-record-proof               # → scripts/record_proof.sh
+│   ├── rn-collect-feedback           # → scripts/collect-feedback.sh
+│   ├── rn-eas-artifact               # → scripts/eas_resolve_artifact.sh
+│   ├── rn-generate-pr-body           # → scripts/generate_pr_body.sh
+│   └── rn-snapshot                   # → scripts/snapshot_state.sh
 ├── hooks/
-│   ├── hooks.json                    # 4 hook events: SessionStart, PostToolUse, CwdChanged, SubagentStart
+│   ├── hooks.json                    # 5 hook events: SessionStart, PostToolUse, CwdChanged, SubagentStart, PostToolUseFailure
 │   ├── detect-rn-project.sh          # SessionStart: auto-detect RN projects + install deps
 │   ├── post-edit-health-check.sh     # PostToolUse: checks simulator for crashes after source file edits
 │   ├── cwd-changed.sh               # CwdChanged: re-detect RN project on directory change
-│   └── subagent-start.sh            # SubagentStart: inject CDP connection status for subagents
+│   ├── subagent-start.sh            # SubagentStart: inject CDP connection status for subagents
+│   └── tool-use-failure.sh          # PostToolUseFailure: auto-diagnose CDP tool failures
 └── scripts/
     ├── cdp-bridge/                   # MCP server (TypeScript)
     │   ├── src/

@@ -35,6 +35,7 @@ description: |
   </example>
 tools: Bash, Read, Write, Edit, Glob, Grep, mcp__rn-dev-agent-cdp__*
 model: sonnet
+memory: true
 color: cyan
 skills: rn-device-control, rn-testing, rn-debugging
 ---
@@ -54,7 +55,7 @@ before stopping:
    `adb devices` (Android).
 2. If using an EAS build (`--eas` flag or user request):
    ```bash
-   RESULT=$(bash ${CLAUDE_PLUGIN_ROOT}/scripts/eas_resolve_artifact.sh <platform> [profile]) || EXIT_CODE=$?
+   RESULT=$(rn-eas-artifact <platform> [profile]) || EXIT_CODE=$?
    EXIT_CODE="${EXIT_CODE:-0}"
    # Parse exit code:
    #   0 → extract path: ARTIFACT=$(echo "$RESULT" | jq -r '.path')
@@ -65,12 +66,12 @@ before stopping:
      # Parse .path from JSON (use jq if available, otherwise node)
      ARTIFACT=$(echo "$RESULT" | jq -r '.path' 2>/dev/null) || \
        ARTIFACT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).path)" <<< "$RESULT")
-     bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform> --artifact "$ARTIFACT"
+     rn-ensure-running <platform> --artifact "$ARTIFACT"
    fi
    ```
 3. Otherwise (local dev build):
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform>
+   rn-ensure-running <platform>
    ```
 4. After exit 0: call `cdp_status` again to confirm CDP connects.
 5. If the script fails (exit 1-4), report the JSON error message and STOP.

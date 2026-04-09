@@ -38,7 +38,7 @@ Then collect the following (skip what was already provided via $ARGUMENTS):
 Run the collection script to gather sanitized environment data:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/collect-feedback.sh
+rn-collect-feedback
 ```
 
 This collects (all redacted):

@@ -1,5 +1,5 @@
 {
-  "description": "RN project detection, post-edit health check, CWD re-detection, and subagent CDP context injection",
+  "description": "RN project detection, post-edit health check, CWD re-detection, subagent CDP injection, and tool failure diagnostics",
   "hooks": {
     "SessionStart": [
       {
@@ -42,6 +42,18 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__*rn-dev-agent*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/tool-use-failure.sh",
+            "timeout": 5
           }
         ]
       }

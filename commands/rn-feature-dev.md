@@ -168,7 +168,7 @@ First, verify the simulator is running and CDP is connected:
 1. Detect platform: check `xcrun simctl list devices booted` (iOS) or
    `adb devices` (Android)
 2. If no device is booted, attempt auto-recovery:
-   - Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/expo_ensure_running.sh <platform>`
+   - Run `rn-ensure-running <platform>`
    - If exit 0: call `cdp_status` to confirm connection
    - If the script fails: report the error and ask the user to boot the simulator.
      Do not skip verification without user consent.
@@ -419,7 +419,7 @@ Then start recording:
 PLATFORM="ios"  # or "android" based on booted devices
 
 # Start recording
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh start $PLATFORM docs/proof/<feature-slug>/flow-$PLATFORM.mp4
+rn-record-proof start $PLATFORM docs/proof/<feature-slug>/flow-$PLATFORM.mp4
 ```
 
 If recording fails to start (no simulator, permissions), log a warning and
@@ -463,13 +463,13 @@ the architect included them for a reason.
 Stop the background video recording:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh stop
+rn-record-proof stop
 ```
 
 Attempt GIF conversion for inline PR display:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/record_proof.sh convert-gif \
+rn-record-proof convert-gif \
   docs/proof/<feature-slug>/flow-$PLATFORM.mp4 \
   docs/proof/<feature-slug>/flow-$PLATFORM.gif
 ```
@@ -536,7 +536,7 @@ to re-record. Do NOT present invalid proof as complete.
 ### Step 5: Generate PR body
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/generate_pr_body.sh docs/proof/<feature-slug>/
+rn-generate-pr-body docs/proof/<feature-slug>/
 ```
 
 This produces `docs/proof/<feature-slug>/PR-BODY.md` — a ready-to-paste PR
