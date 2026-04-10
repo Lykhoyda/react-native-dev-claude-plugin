@@ -1,6 +1,6 @@
 export const INJECTED_HELPERS = `
 (function() {
-  var __HELPERS_VERSION__ = 12;
+  var __HELPERS_VERSION__ = 13;
   if (globalThis.__RN_AGENT && globalThis.__RN_AGENT.__v === __HELPERS_VERSION__) return;
   if (globalThis.__RN_AGENT) delete globalThis.__RN_AGENT;
 
@@ -15,22 +15,52 @@ export const INJECTED_HELPERS = `
     return null;
   }
 
+  // Sanitize an object by enumerating properties safely — getters that throw
+  // (e.g. useNavigation context access outside NavigationContainer) would
+  // normally crash JSON.stringify before the replacer runs.
+  function sanitizeForSerialization(obj, seen, depth) {
+    seen = seen || new WeakSet();
+    depth = depth || 0;
+    if (depth > 20) return '[MaxDepth]';
+    if (obj === null || obj === undefined) return obj;
+    var t = typeof obj;
+    if (t === 'string' || t === 'number' || t === 'boolean') return obj;
+    if (t === 'function') return '[Function]';
+    if (t === 'symbol') return obj.toString();
+    if (t !== 'object') return '[Unserializable:' + t + ']';
+    if (seen.has(obj)) return '[Circular]';
+    seen.add(obj);
+    if (obj instanceof Error) return { message: obj.message, stack: obj.stack };
+    if (Array.isArray(obj)) {
+      var arr = [];
+      for (var i = 0; i < obj.length && i < 200; i++) {
+        try { arr.push(sanitizeForSerialization(obj[i], seen, depth + 1)); }
+        catch(e) { arr.push('[GetterError:' + (e && e.message || 'unknown') + ']'); }
+      }
+      return arr;
+    }
+    var out = {};
+    var keys;
+    try { keys = Object.keys(obj); }
+    catch(e) { return '[UnenumerableKeys]'; }
+    for (var k = 0; k < keys.length && k < 100; k++) {
+      var key = keys[k];
+      try {
+        var val = obj[key]; // Getter can throw here
+        out[key] = sanitizeForSerialization(val, seen, depth + 1);
+      } catch(e) {
+        out[key] = '[GetterError:' + (e && e.message && e.message.slice(0, 60) || 'unknown') + ']';
+      }
+    }
+    return out;
+  }
+
   function safeStringify(obj, maxLen) {
     try {
-      var seen = new WeakSet();
       var limit = maxLen || 50000;
-      var str = JSON.stringify(obj, function(key, val) {
-        try {
-          if (typeof val === 'function') return '[Function]';
-          if (typeof val === 'symbol') return val.toString();
-          if (val instanceof Error) return { message: val.message, stack: val.stack };
-          if (typeof val === 'object' && val !== null) {
-            if (seen.has(val)) return '[Circular]';
-            seen.add(val);
-          }
-          return val;
-        } catch(e) { return '[Unserializable]'; }
-      });
+      // Pre-sanitize to handle throwing getters (B90 Tier 4 fix)
+      var sanitized = sanitizeForSerialization(obj);
+      var str = JSON.stringify(sanitized);
       if (str && str.length > limit) {
         return JSON.stringify({
           __agent_truncated: true,
@@ -1074,39 +1104,51 @@ export const INJECTED_HELPERS = `
     var hookState = targetFiber.memoizedState;
     var limit = 20;
     while (hookState && limit-- > 0) {
-      var hs = hookState.memoizedState;
+      var hs;
+      try { hs = hookState.memoizedState; }
+      catch(e) { hooks.push('[HookAccessError]'); hookState = hookState.next; continue; }
+
       if (typeof hs === 'function') {
         hooks.push('[Function]');
       } else if (typeof hs === 'object' && hs !== null) {
-        if (hs.current !== undefined) {
-          hooks.push({ ref: hs.current !== null ? typeof hs.current : null });
-        } else if (hs._formValues && hs._formState) {
-          try {
+        try {
+          if (hs.current !== undefined) {
+            hooks.push({ ref: hs.current !== null ? typeof hs.current : null });
+          } else if (hs._formValues && hs._formState) {
             hooks.push({
               __type: 'react-hook-form',
-              values: hs._formValues,
-              errors: hs._formState.errors,
+              values: sanitizeForSerialization(hs._formValues),
+              errors: sanitizeForSerialization(hs._formState.errors),
               isDirty: hs._formState.isDirty,
               isValid: hs._formState.isValid,
               isSubmitting: hs._formState.isSubmitting
             });
-          } catch(e) { hooks.push('[RHF:unreadable]'); }
-        } else {
-          try { JSON.stringify(hs); hooks.push(hs); }
-          catch(e) { hooks.push('[Circular]'); }
+          } else {
+            // Use sanitizer directly to handle getters that throw (useNavigation etc.)
+            hooks.push(sanitizeForSerialization(hs));
+          }
+        } catch(e) {
+          hooks.push('[HookSerializeError:' + (e && e.message && e.message.slice(0, 60) || 'unknown') + ']');
         }
       } else {
         hooks.push(hs);
       }
-      hookState = hookState.next;
+      try { hookState = hookState.next; }
+      catch(e) { break; }
     }
 
     var propsObj = {};
     if (targetFiber.memoizedProps) {
-      var pkeys = Object.keys(targetFiber.memoizedProps);
+      var pkeys;
+      try { pkeys = Object.keys(targetFiber.memoizedProps); }
+      catch(e) { pkeys = []; }
       for (var i = 0; i < pkeys.length; i++) {
-        var v = targetFiber.memoizedProps[pkeys[i]];
-        propsObj[pkeys[i]] = typeof v === 'function' ? '[Function]' : v;
+        try {
+          var v = targetFiber.memoizedProps[pkeys[i]];
+          propsObj[pkeys[i]] = typeof v === 'function' ? '[Function]' : sanitizeForSerialization(v);
+        } catch(e) {
+          propsObj[pkeys[i]] = '[PropAccessError]';
+        }
       }
     }
 

@@ -331,12 +331,32 @@ export function createNavGraphHandler(getClient: () => CDPClient) {
       result.playbook_tips = getPlaybook(args.platform);
     }
 
-    // 3. Build plan
+    // 3. Build plan — fetch LIVE nav state first (B-Tier3 fix)
+    // The cached graph's is_active flags may be stale vs runtime. Use the actual
+    // current screen from __RN_AGENT.getNavState() as the "from" for plan building.
+    let liveFromScreen: string | undefined = args.from ?? undefined;
+    if (!liveFromScreen) {
+      try {
+        const navStateResult = await client.evaluate('__RN_AGENT.getNavState()');
+        if (typeof navStateResult.value === 'string') {
+          interface NavState { routeName?: string; nested?: NavState }
+          const liveState = JSON.parse(navStateResult.value) as NavState;
+          const getDeepestRoute = (s: NavState | null | undefined): string | null => {
+            if (!s) return null;
+            if (s.nested) return getDeepestRoute(s.nested);
+            return s.routeName ?? null;
+          };
+          const live = getDeepestRoute(liveState);
+          if (live) liveFromScreen = live;
+        }
+      } catch { /* fall back to cached graph */ }
+    }
+
     if (projectRoot) {
       const graph = readGraph(projectRoot);
       if (graph) {
-        result.plan = buildNavigationPlan(graph, args.screen, args.from ?? undefined) ?? undefined;
-        result.from = result.plan?.from ?? null;
+        result.plan = buildNavigationPlan(graph, args.screen, liveFromScreen) ?? undefined;
+        result.from = result.plan?.from ?? liveFromScreen ?? null;
       }
     }
 

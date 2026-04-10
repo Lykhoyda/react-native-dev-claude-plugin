@@ -181,6 +181,10 @@ const SWIPE_DURATION_MS = 300;
 const SCROLL_FRACTION = 0.4;
 const FOCUS_DELAY_MS = 100;
 
+export function getCachedScreenRect(): { width: number; height: number } | null {
+  return getScreenRect();
+}
+
 function computeSwipeCoords(direction: string, screen: { width: number; height: number }): { x1: number; y1: number; x2: number; y2: number } | null {
   const cx = Math.round(screen.width / 2);
   const cy = Math.round(screen.height / 2);

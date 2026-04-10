@@ -1,6 +1,6 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { runAgentDevice, getActiveSession } from '../agent-device-wrapper.js';
+import { runAgentDevice, getActiveSession, getCachedScreenRect } from '../agent-device-wrapper.js';
 import { withSession } from '../utils.js';
 import type { ToolResult } from '../utils.js';
 import { okResult, failResult } from '../utils.js';
@@ -18,10 +18,54 @@ interface FindArgs {
 }
 
 export function createDeviceFindHandler(): (args: FindArgs) => Promise<ToolResult> {
-  return withSession((args) => {
+  return withSession(async (args) => {
     const cliArgs = ['find', args.text];
     if (args.action) cliArgs.push(args.action);
-    return runAgentDevice(cliArgs);
+    const result = await runAgentDevice(cliArgs);
+
+    // B92 fix: On AMBIGUOUS_MATCH, fetch a snapshot and return disambiguation candidates.
+    if (result.isError) {
+      const text = result.content?.[0]?.text ?? '';
+      if (text.includes('AMBIGUOUS_MATCH') || text.includes('matched') && text.includes('elements')) {
+        try {
+          const snapshotResult = await runAgentDevice(['snapshot', '-i']);
+          if (!snapshotResult.isError) {
+            const envelope = JSON.parse(snapshotResult.content[0].text) as {
+              ok?: boolean;
+              data?: { nodes?: Array<{ ref: string; label?: string; identifier?: string; type?: string; hittable?: boolean; rect?: { x: number; y: number; width: number; height: number } }> };
+            };
+            if (envelope.ok && envelope.data?.nodes) {
+              const query = args.text.toLowerCase();
+              const candidates = envelope.data.nodes
+                .filter((n) => {
+                  const label = (n.label ?? '').toLowerCase();
+                  const id = (n.identifier ?? '').toLowerCase();
+                  return label.includes(query) || id.includes(query);
+                })
+                .slice(0, 10)
+                .map((n) => ({
+                  ref: n.ref,
+                  label: n.label,
+                  testID: n.identifier,
+                  type: n.type,
+                  hittable: n.hittable,
+                  position: n.rect ? { x: n.rect.x, y: n.rect.y } : undefined,
+                }));
+              return failResult(
+                `AMBIGUOUS_MATCH: "${args.text}" matched ${candidates.length} elements. Use device_press with one of these refs.`,
+                {
+                  code: 'AMBIGUOUS_MATCH',
+                  query: args.text,
+                  candidates,
+                  hint: 'Pick the correct ref (prefer one with hittable=true) and call device_press(ref="...") directly.',
+                },
+              );
+            }
+          }
+        } catch { /* fall through to original error */ }
+      }
+    }
+    return result;
   });
 }
 
@@ -146,6 +190,30 @@ interface SwipeArgs {
   pattern?: 'one-way' | 'ping-pong';
 }
 
+// Default screen dimensions for common devices — used when screen rect cache is empty.
+// Covers iPhone 17 Pro / 15 Pro / 14 Pro Max and similar Android 1080x2400 phones.
+const DEFAULT_SCREEN = { width: 402, height: 874 };
+const SWIPE_FRACTION = 0.4;
+const DEFAULT_SWIPE_DURATION_MS = 300;
+
+function computeSwipeFromDirection(
+  direction: 'up' | 'down' | 'left' | 'right',
+  screen: { width: number; height: number },
+): { x1: number; y1: number; x2: number; y2: number } {
+  const cx = Math.round(screen.width / 2);
+  const cy = Math.round(screen.height / 2);
+  const dy = Math.round(screen.height * SWIPE_FRACTION);
+  const dx = Math.round(screen.width * SWIPE_FRACTION);
+  switch (direction) {
+    // "swipe down" means finger moves from top to bottom (pull-to-refresh gesture)
+    case 'down': return { x1: cx, y1: cy - dy, x2: cx, y2: cy + dy };
+    // "swipe up" means finger moves from bottom to top
+    case 'up': return { x1: cx, y1: cy + dy, x2: cx, y2: cy - dy };
+    case 'left': return { x1: cx + dx, y1: cy, x2: cx - dx, y2: cy };
+    case 'right': return { x1: cx - dx, y1: cy, x2: cx + dx, y2: cy };
+  }
+}
+
 export function createDeviceSwipeHandler(): (args: SwipeArgs) => Promise<ToolResult> {
   return withSession((args) => {
     if (args.x1 != null && args.y1 != null && args.x2 != null && args.y2 != null) {
@@ -156,7 +224,16 @@ export function createDeviceSwipeHandler(): (args: SwipeArgs) => Promise<ToolRes
       return runAgentDevice(cliArgs);
     }
     if (args.direction) {
-      return runAgentDevice(['scroll', args.direction]);
+      // B-Tier3 fix: Use real swipe gesture (not scroll) for direction-based swipes.
+      // The previous delegation to `scroll` produced smooth list scrolls that don't
+      // trigger gesture handlers (pull-to-refresh, swipe-to-delete).
+      const screen = getCachedScreenRect() ?? DEFAULT_SCREEN;
+      const coords = computeSwipeFromDirection(args.direction, screen);
+      const duration = args.durationMs ?? DEFAULT_SWIPE_DURATION_MS;
+      const cliArgs = ['swipe', String(coords.x1), String(coords.y1), String(coords.x2), String(coords.y2), String(duration)];
+      if (args.count && args.count > 1) cliArgs.push('--count', String(args.count));
+      if (args.pattern) cliArgs.push('--pattern', args.pattern);
+      return runAgentDevice(cliArgs);
     }
     return Promise.resolve(failResult('Provide either direction or x1,y1,x2,y2 coordinates'));
   });
