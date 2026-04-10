@@ -67,11 +67,14 @@ async function collectJsConsole(
   }
 }
 
+const SIGKILL_GRACE_MS = 1500;
+
 function collectNativeIos(durationMs: number, signal: AbortSignal): Promise<LogEntry[]> {
   if (signal.aborted) return Promise.resolve([]);
 
   return new Promise<LogEntry[]>((resolve, reject) => {
     const entries: LogEntry[] = [];
+    let killed = false;
     let killedByUs = false;
     let settled = false;
 
@@ -88,7 +91,14 @@ function collectNativeIos(durationMs: number, signal: AbortSignal): Promise<LogE
     }
 
     const killMs = durationMs > 0 ? durationMs : 100;
-    const kill = () => { killedByUs = true; proc.kill('SIGTERM'); };
+    let sigkillTimer: NodeJS.Timeout | undefined;
+    const kill = () => {
+      if (killed) return;
+      killed = true;
+      killedByUs = true;
+      proc.kill('SIGTERM');
+      sigkillTimer = setTimeout(() => proc.kill('SIGKILL'), SIGKILL_GRACE_MS);
+    };
     const timeout = setTimeout(kill, killMs);
 
     const onAbort = () => { clearTimeout(timeout); kill(); };
@@ -97,11 +107,14 @@ function collectNativeIos(durationMs: number, signal: AbortSignal): Promise<LogE
     if (signal.aborted) { clearTimeout(timeout); kill(); }
 
     let stderrBuf = '';
-    proc.stderr!.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString('utf8'); });
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      if (killed || settled) return;
+      stderrBuf += chunk.toString('utf8');
+    });
 
     let buf = '';
     proc.stdout!.on('data', (chunk: Buffer) => {
-      if (settled) return;
+      if (killed || settled) return;
       buf += chunk.toString('utf8');
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
@@ -112,8 +125,10 @@ function collectNativeIos(durationMs: number, signal: AbortSignal): Promise<LogE
     });
 
     proc.on('close', (code) => {
+      if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (sigkillTimer) clearTimeout(sigkillTimer);
       signal.removeEventListener('abort', onAbort);
       if (buf.trim()) {
         const entry = parseIosNdjson(buf);
@@ -127,9 +142,13 @@ function collectNativeIos(durationMs: number, signal: AbortSignal): Promise<LogE
     });
 
     proc.on('error', (err) => {
+      if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (sigkillTimer) clearTimeout(sigkillTimer);
       signal.removeEventListener('abort', onAbort);
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch { /* process may not exist */ }
       reject(err);
     });
   });
@@ -163,6 +182,7 @@ function collectNativeAndroid(durationMs: number, signal: AbortSignal): Promise<
     const year = new Date().getFullYear();
     const tzOffsetMs = new Date().getTimezoneOffset() * 60_000;
     const killMs = durationMs > 0 ? durationMs : 100;
+    let killed = false;
     let killedByUs = false;
     let settled = false;
 
@@ -177,7 +197,14 @@ function collectNativeAndroid(durationMs: number, signal: AbortSignal): Promise<
       return;
     }
 
-    const kill = () => { killedByUs = true; proc.kill('SIGTERM'); };
+    let sigkillTimer: NodeJS.Timeout | undefined;
+    const kill = () => {
+      if (killed) return;
+      killed = true;
+      killedByUs = true;
+      proc.kill('SIGTERM');
+      sigkillTimer = setTimeout(() => proc.kill('SIGKILL'), SIGKILL_GRACE_MS);
+    };
     const timeout = setTimeout(kill, killMs);
 
     const onAbort = () => { clearTimeout(timeout); kill(); };
@@ -186,11 +213,14 @@ function collectNativeAndroid(durationMs: number, signal: AbortSignal): Promise<
     if (signal.aborted) { clearTimeout(timeout); kill(); }
 
     let stderrBuf = '';
-    proc.stderr!.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString('utf8'); });
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      if (killed || settled) return;
+      stderrBuf += chunk.toString('utf8');
+    });
 
     let buf = '';
     proc.stdout!.on('data', (chunk: Buffer) => {
-      if (settled) return;
+      if (killed || settled) return;
       buf += chunk.toString('utf8');
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
@@ -201,8 +231,10 @@ function collectNativeAndroid(durationMs: number, signal: AbortSignal): Promise<
     });
 
     proc.on('close', (code) => {
+      if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (sigkillTimer) clearTimeout(sigkillTimer);
       signal.removeEventListener('abort', onAbort);
       if (buf.trim()) {
         const entry = parseLogcatLine(buf, year, tzOffsetMs);
@@ -216,9 +248,13 @@ function collectNativeAndroid(durationMs: number, signal: AbortSignal): Promise<
     });
 
     proc.on('error', (err) => {
+      if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (sigkillTimer) clearTimeout(sigkillTimer);
       signal.removeEventListener('abort', onAbort);
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch { /* process may not exist */ }
       reject(err);
     });
   });

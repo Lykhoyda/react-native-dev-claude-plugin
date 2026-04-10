@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { okResult, failResult } from '../utils.js';
 import type { ToolResult } from '../utils.js';
+import { detectPlatform } from './platform-utils.js';
 
 const execFileAsync = promisify(execFile);
 const EXEC_TIMEOUT = 10_000;
@@ -36,20 +37,6 @@ interface PermissionArgs {
   permission: string;
   appId: string;
   platform?: string;
-}
-
-async function detectPlatform(): Promise<'ios' | 'android' | null> {
-  try {
-    const { stdout } = await execFileAsync('xcrun', ['simctl', 'list', 'devices', 'booted'], { timeout: EXEC_TIMEOUT });
-    if (stdout.includes('Booted')) return 'ios';
-  } catch { /* no iOS */ }
-
-  try {
-    const { stdout } = await execFileAsync('adb', ['devices'], { timeout: EXEC_TIMEOUT });
-    if (/\tdevice$/m.test(stdout)) return 'android';
-  } catch { /* no Android */ }
-
-  return null;
 }
 
 async function iosPermission(action: string, permission: string, appId: string): Promise<ToolResult> {
@@ -187,7 +174,7 @@ async function iosQueryPermission(permission: string, appId: string): Promise<To
 
 export function createDevicePermissionHandler(): (args: PermissionArgs) => Promise<ToolResult> {
   return async (args) => {
-    const platform = args.platform || await detectPlatform();
+    const platform = args.platform ?? await detectPlatform();
     if (!platform) return failResult('No iOS simulator or Android device detected');
 
     if (args.action === 'query') {

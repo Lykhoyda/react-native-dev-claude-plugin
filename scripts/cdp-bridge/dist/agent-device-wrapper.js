@@ -154,6 +154,18 @@ export function clearActiveSession() {
 export function hasActiveSession() {
     return activeSession !== null;
 }
+// Returns the `-s <serial>` args for adb when a specific device/emulator is
+// targeted. Prefers the active session's deviceId, then ANDROID_SERIAL env.
+// Returns an empty array when no target is set (adb will pick the only
+// connected device, or fail with "more than one device" if multiple exist).
+export function getAdbSerial() {
+    const session = getActiveSession();
+    if (session?.deviceId)
+        return ['-s', session.deviceId];
+    if (process.env.ANDROID_SERIAL)
+        return ['-s', process.env.ANDROID_SERIAL];
+    return [];
+}
 // --- Fast-runner dispatch (highest-priority tier for iOS) ---
 const SWIPE_DURATION_MS = 300;
 const SCROLL_FRACTION = 0.4;

@@ -30,8 +30,18 @@ import {
   createDeviceLongPressHandler,
   createDevicePinchHandler,
   createDeviceBackHandler,
+  createDeviceFocusNextHandler,
 } from './tools/device-interact.js';
 import { createDevicePermissionHandler } from './tools/device-permission.js';
+import { createDeviceDeeplinkHandler } from './tools/device-deeplink.js';
+import {
+  createDeviceAcceptSystemDialogHandler,
+  createDeviceDismissSystemDialogHandler,
+} from './tools/device-system-dialog.js';
+import {
+  createDevicePickValueHandler,
+  createDevicePickDateHandler,
+} from './tools/device-picker.js';
 import { createNavGraphHandler } from './tools/nav-graph.js';
 import { createDeviceBatchHandler } from './tools/device-batch.js';
 import { handleAutoLogin } from './tools/auto-login.js';
@@ -54,7 +64,7 @@ const createClient = (port: number): CDPClient => new CDPClient(port);
 
 const server = new McpServer({
   name: 'rn-dev-agent-cdp',
-  version: '0.9.2',
+  version: '0.10.1',
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -324,29 +334,32 @@ trackedTool(
 
 trackedTool(
   'device_find',
-  'Find a UI element by visible text and optionally interact with it. Use action="click" to tap, omit for find-only. Returns element ref for use with device_press/device_fill. Requires an open session (call device_snapshot action=open first). If AMBIGUOUS_MATCH error occurs (common text like "Next", "Done"), use device_snapshot to get the accessibility tree and device_press with the specific @ref instead.',
+  'Find a UI element by visible text and optionally interact with it. Use action="click" to tap, omit for find-only. Returns element ref for use with device_press/device_fill. Requires an open session. For overlapping labels (e.g. "Property damaged" vs "Property lost"), pass exact=true for strict match or index=N to pick the Nth candidate directly — both short-circuit AMBIGUOUS_MATCH. If AMBIGUOUS_MATCH still occurs, the result includes a candidates[] array with refs you can pass to device_press.',
   {
     text: z.string().describe('Visible text, accessibility label, or identifier to find'),
     action: z.string().optional().describe('Action to perform: "click" to tap, omit for search-only'),
+    exact: z.boolean().optional().describe('Require exact label match (case-sensitive). Skips fuzzy matching entirely.'),
+    index: z.number().int().min(0).optional().describe('Pick the Nth candidate (0-based) when multiple elements match. Short-circuits AMBIGUOUS_MATCH.'),
   },
   createDeviceFindHandler(),
 );
 
 trackedTool(
   'device_press',
-  'Tap a UI element by its @ref from device_snapshot. Supports double-tap, repeated taps, and long hold. Requires an open session.',
+  'Tap a UI element by its @ref from device_snapshot. Supports double-tap, repeated taps, long hold, and post-tap focus settle. Requires an open session.',
   {
     ref: z.string().describe('Element ref from device_snapshot (e.g. "e3" or "@e3")'),
     doubleTap: z.boolean().optional().describe('Use double-tap gesture'),
     count: z.number().int().min(1).max(50).optional().describe('Repeat tap N times (for rapid-fire interactions)'),
     holdMs: z.number().int().min(0).max(10000).optional().describe('Hold duration in ms (for long-press via ref)'),
+    waitForFocusMs: z.number().int().min(0).max(5000).optional().describe('Sleep this many ms after tap to let keyboard focus settle — useful in sequential press+fill flows where focus would otherwise not propagate.'),
   },
   createDevicePressHandler(),
 );
 
 trackedTool(
   'device_fill',
-  'Type text into an input field by its @ref from device_snapshot. Clears existing text first. Requires an open session.',
+  'Type text into an input field by its @ref from device_snapshot. Always re-taps the element first so keyboard focus is on the correct field even in sequential fills. On "no focused text input" errors, automatically falls back: coordinate re-tap + retry → Android adb input / iOS Maestro inputText. Check meta.fallbackUsed in the result to see which strategy succeeded. Requires an open session.',
   {
     ref: z.string().describe('Input field ref from device_snapshot (e.g. "e5" or "@e5")'),
     text: z.string().describe('Text to type into the field'),
@@ -430,6 +443,70 @@ trackedTool(
     platform: z.string().optional().describe('Force platform: "ios" or "android". Auto-detected if omitted.'),
   },
   createDevicePermissionHandler(),
+);
+
+trackedTool(
+  'device_deeplink',
+  'Open a deep link or universal URL on the booted simulator/emulator. Cross-platform: wraps xcrun simctl openurl (iOS) and adb shell am start -a VIEW -d (Android). Session-less — no need to call device_snapshot action=open first. Use to enter the app at a specific route when cdp_navigate is unavailable (RN 0.83 Bridgeless mode) or for universal-link testing.',
+  {
+    url: z.string().describe('URL to open, e.g. "myapp://claims/new" or "https://example.com/page".'),
+    platform: z.enum(['ios', 'android']).optional().describe('Force platform. Auto-detected from the active session or booted devices if omitted.'),
+    packageName: z.string().optional().describe('(Android only) Explicit package/activity, e.g. "com.example/.MainActivity". Usually not needed — intent resolution picks the right app.'),
+  },
+  createDeviceDeeplinkHandler(),
+);
+
+trackedTool(
+  'device_accept_system_dialog',
+  'Tap an OS-level system dialog button (outside the app accessibility tree) — e.g. "Open in App?", "Allow notifications", biometric prompts. Runs via Maestro so the tap reaches SpringBoard (iOS) or SystemUI (Android). Tries common accept labels by default (Allow, OK, Open, Continue, Yes). Call immediately after a permission trigger or deep link is expected to surface a system prompt. Session-less.',
+  {
+    label: z.string().optional().describe('Specific button label to tap. Omit to try common defaults (Allow, OK, Open, Continue, Yes, Accept).'),
+    platform: z.enum(['ios', 'android']).optional().describe('Force platform. Auto-detected from the active session or booted devices if omitted.'),
+    timeoutMs: z.number().int().min(1000).max(60000).optional().describe('Maestro invocation timeout (default 15000ms).'),
+  },
+  createDeviceAcceptSystemDialogHandler(),
+);
+
+trackedTool(
+  'device_dismiss_system_dialog',
+  'Tap an OS-level system dialog dismiss button — e.g. "Cancel", "Don\u2019t Allow", "Deny", "Not Now". Same mechanism as device_accept_system_dialog but for the negative action. Handles both ASCII and typographic apostrophes in "Don\u2019t Allow". Session-less.',
+  {
+    label: z.string().optional().describe('Specific button label to tap. Omit to try common defaults (Cancel, Don\u2019t Allow, Deny, No, Not Now).'),
+    platform: z.enum(['ios', 'android']).optional().describe('Force platform. Auto-detected from the active session or booted devices if omitted.'),
+    timeoutMs: z.number().int().min(1000).max(60000).optional().describe('Maestro invocation timeout (default 15000ms).'),
+  },
+  createDeviceDismissSystemDialogHandler(),
+);
+
+trackedTool(
+  'device_pick_value',
+  'Select a value in a UIPickerView / Android picker wheel by tapping the target row. Works for any picker that exposes row labels via accessibility. If pickerTestId is provided, taps the picker open first. Known limitation: only works when the target value is already visible in the wheel window (scroll-to-visible is not yet implemented).',
+  {
+    value: z.string().describe('The visible row label to select (e.g. "Claim damages", "Male", "USD")'),
+    pickerTestId: z.string().optional().describe('Optional testID of the picker itself — tapped first to ensure the picker is open.'),
+    platform: z.enum(['ios', 'android']).optional().describe('Force platform. Auto-detected if omitted.'),
+    timeoutMs: z.number().int().min(1000).max(120000).optional().describe('Maestro timeout (default 20000ms).'),
+  },
+  createDevicePickValueHandler(),
+);
+
+trackedTool(
+  'device_pick_date',
+  'Select a date in a UIDatePicker (wheels mode) / Android DatePicker. Parses YYYY-MM-DD or ISO 8601 and taps month name, day, and year in sequence. Known limitation: only wheels mode is supported — iOS 14+ inline calendar mode requires tapping calendar cells via device_find.',
+  {
+    date: z.string().describe('Target date — YYYY-MM-DD or full ISO 8601. Time component is ignored.'),
+    pickerTestId: z.string().optional().describe('Optional testID of the date picker — tapped first to ensure the picker is open.'),
+    platform: z.enum(['ios', 'android']).optional().describe('Force platform. Auto-detected if omitted.'),
+    timeoutMs: z.number().int().min(1000).max(120000).optional().describe('Maestro timeout (default 20000ms).'),
+  },
+  createDevicePickDateHandler(),
+);
+
+trackedTool(
+  'device_focus_next',
+  'Move keyboard focus to the next input field by tapping the soft keyboard\'s Next/Return/Done/Go button. Use in multi-field form flows where sequential device_press + device_fill calls leave focus stuck on the first field. Requires an open session and a visible keyboard.',
+  {},
+  createDeviceFocusNextHandler(),
 );
 
 trackedTool(

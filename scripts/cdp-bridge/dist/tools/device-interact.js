@@ -1,13 +1,87 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { runAgentDevice, getActiveSession, getCachedScreenRect } from '../agent-device-wrapper.js';
+import { runAgentDevice, getActiveSession, getCachedScreenRect, getAdbSerial } from '../agent-device-wrapper.js';
 import { withSession } from '../utils.js';
 import { okResult, failResult } from '../utils.js';
+import { runMaestroInline, yamlEscape } from '../maestro-invoke.js';
 const execFile = promisify(execFileCb);
 const ANDROID_UNSAFE_CHARS = /[+@#$%^&*(){}|\\<>~`[\]?*]/;
 const ANDROID_FILL_MAX_SAFE_LEN = 30;
+function candidateFromNode(n) {
+    return {
+        ref: n.ref,
+        label: n.label,
+        testID: n.identifier,
+        type: n.type,
+        hittable: n.hittable,
+        position: n.rect ? { x: n.rect.x, y: n.rect.y } : undefined,
+    };
+}
+async function fetchSnapshotNodes() {
+    try {
+        const snapshotResult = await runAgentDevice(['snapshot', '-i']);
+        if (snapshotResult.isError)
+            return null;
+        const envelope = JSON.parse(snapshotResult.content[0].text);
+        if (!envelope.ok || !envelope.data?.nodes)
+            return null;
+        return envelope.data.nodes;
+    }
+    catch {
+        return null;
+    }
+}
+async function fetchFindCandidates(query, exact) {
+    const nodes = await fetchSnapshotNodes();
+    if (!nodes)
+        return null;
+    const needle = query.toLowerCase();
+    return nodes
+        .filter((n) => {
+        const label = n.label ?? '';
+        const id = n.identifier ?? '';
+        if (exact)
+            return label === query || id === query;
+        return label.toLowerCase().includes(needle) || id.toLowerCase().includes(needle);
+    })
+        .slice(0, 10)
+        .map(candidateFromNode);
+}
+async function pressCandidate(candidate, action) {
+    const ref = candidate.ref.startsWith('@') ? candidate.ref : `@${candidate.ref}`;
+    if (action === 'click') {
+        return runAgentDevice(['press', ref]);
+    }
+    return okResult({ ref: candidate.ref, label: candidate.label, testID: candidate.testID });
+}
 export function createDeviceFindHandler() {
     return withSession(async (args) => {
+        // Fast path when caller already knows they want exact or a specific index:
+        // go straight to a snapshot-based client-side match so we never roll the dice
+        // on agent-device's fuzzy matcher returning AMBIGUOUS_MATCH.
+        if (args.exact === true || args.index !== undefined) {
+            const candidates = await fetchFindCandidates(args.text, args.exact === true);
+            if (candidates === null) {
+                // Snapshot failed and caller has strict requirements — do NOT fall through
+                // to the fuzzy agent-device path because it cannot honor exact/index. Fail
+                // cleanly so the caller knows exact/index semantics aren't reachable.
+                return failResult(`Snapshot unavailable — cannot resolve ${args.exact ? 'exact' : 'index-based'} match for "${args.text}". Retry after device_snapshot action=open/snapshot.`, { code: 'SNAPSHOT_UNAVAILABLE', query: args.text });
+            }
+            if (candidates.length === 0) {
+                return failResult(`No element matches "${args.text}" (exact=${args.exact === true})`, { code: 'NOT_FOUND', query: args.text });
+            }
+            if (args.index !== undefined) {
+                if (args.index < 0 || args.index >= candidates.length) {
+                    return failResult(`index ${args.index} out of range (got ${candidates.length} candidates)`, { code: 'INDEX_OUT_OF_RANGE', count: candidates.length, candidates });
+                }
+                return pressCandidate(candidates[args.index], args.action);
+            }
+            // exact=true, no index: require single match
+            if (candidates.length === 1) {
+                return pressCandidate(candidates[0], args.action);
+            }
+            return failResult(`AMBIGUOUS_MATCH: exact "${args.text}" matched ${candidates.length} elements`, { code: 'AMBIGUOUS_MATCH', query: args.text, candidates, hint: 'Add index: N to pick one.' });
+        }
         const cliArgs = ['find', args.text];
         if (args.action)
             cliArgs.push(args.action);
@@ -15,45 +89,23 @@ export function createDeviceFindHandler() {
         // B92 fix: On AMBIGUOUS_MATCH, fetch a snapshot and return disambiguation candidates.
         if (result.isError) {
             const text = result.content?.[0]?.text ?? '';
-            if (text.includes('AMBIGUOUS_MATCH') || text.includes('matched') && text.includes('elements')) {
-                try {
-                    const snapshotResult = await runAgentDevice(['snapshot', '-i']);
-                    if (!snapshotResult.isError) {
-                        const envelope = JSON.parse(snapshotResult.content[0].text);
-                        if (envelope.ok && envelope.data?.nodes) {
-                            const query = args.text.toLowerCase();
-                            const candidates = envelope.data.nodes
-                                .filter((n) => {
-                                const label = (n.label ?? '').toLowerCase();
-                                const id = (n.identifier ?? '').toLowerCase();
-                                return label.includes(query) || id.includes(query);
-                            })
-                                .slice(0, 10)
-                                .map((n) => ({
-                                ref: n.ref,
-                                label: n.label,
-                                testID: n.identifier,
-                                type: n.type,
-                                hittable: n.hittable,
-                                position: n.rect ? { x: n.rect.x, y: n.rect.y } : undefined,
-                            }));
-                            return failResult(`AMBIGUOUS_MATCH: "${args.text}" matched ${candidates.length} elements. Use device_press with one of these refs.`, {
-                                code: 'AMBIGUOUS_MATCH',
-                                query: args.text,
-                                candidates,
-                                hint: 'Pick the correct ref (prefer one with hittable=true) and call device_press(ref="...") directly.',
-                            });
-                        }
-                    }
+            if (text.includes('AMBIGUOUS_MATCH') || (text.includes('matched') && text.includes('elements'))) {
+                const candidates = await fetchFindCandidates(args.text, false);
+                if (candidates) {
+                    return failResult(`AMBIGUOUS_MATCH: "${args.text}" matched ${candidates.length} elements. Use device_press with one of these refs, or retry with index: N.`, {
+                        code: 'AMBIGUOUS_MATCH',
+                        query: args.text,
+                        candidates,
+                        hint: 'Pick the correct ref (prefer one with hittable=true) and call device_press(ref="...") directly, or call device_find again with index: N.',
+                    });
                 }
-                catch { /* fall through to original error */ }
             }
         }
         return result;
     });
 }
 export function createDevicePressHandler() {
-    return withSession((args) => {
+    return withSession(async (args) => {
         const ref = args.ref.startsWith('@') ? args.ref : `@${args.ref}`;
         const cliArgs = ['press', ref];
         if (args.doubleTap)
@@ -62,7 +114,11 @@ export function createDevicePressHandler() {
             cliArgs.push('--count', String(args.count));
         if (args.holdMs && args.holdMs > 0)
             cliArgs.push('--hold-ms', String(args.holdMs));
-        return runAgentDevice(cliArgs);
+        const result = await runAgentDevice(cliArgs);
+        if (!result.isError && args.waitForFocusMs && args.waitForFocusMs > 0) {
+            await new Promise((r) => setTimeout(r, args.waitForFocusMs));
+        }
+        return result;
     });
 }
 export function createDeviceLongPressHandler() {
@@ -80,14 +136,6 @@ export function createDeviceLongPressHandler() {
         }
         return Promise.resolve(failResult('Provide either ref or x+y coordinates'));
     });
-}
-function getAdbSerial() {
-    const session = getActiveSession();
-    if (session?.deviceId)
-        return ['-s', session.deviceId];
-    if (process.env.ANDROID_SERIAL)
-        return ['-s', process.env.ANDROID_SERIAL];
-    return [];
 }
 async function androidClipboardFill(text) {
     try {
@@ -120,19 +168,93 @@ function isAndroidSession() {
         return false;
     return !!process.env.ANDROID_SERIAL;
 }
+const FOCUS_DELAY_MS = 150;
+const NO_FOCUSED_INPUT_RE = /no focused text input|no focused element|element is not focused/i;
+function isNoFocusedInputError(result) {
+    if (!result.isError)
+        return false;
+    const text = result.content?.[0]?.text ?? '';
+    return NO_FOCUSED_INPUT_RE.test(text);
+}
+function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+async function maestroFillFallback(ref, text, platform) {
+    const escapedRef = yamlEscape(ref.replace(/^@/, ''));
+    const escapedText = yamlEscape(text);
+    const yaml = `- tapOn:\n    id: "${escapedRef}"\n- inputText: "${escapedText}"`;
+    const result = await runMaestroInline(yaml, { platform, slug: 'fill-fallback', timeoutMs: 30_000 });
+    if (result.passed) {
+        return okResult({ filled: true, method: 'maestro', length: text.length }, { meta: { fallbackUsed: 'maestro' } });
+    }
+    return failResult(`device_fill fell through all fallbacks. Last error: ${result.error ?? result.output.slice(0, 200)}`, { code: 'FILL_FAILED', tried: ['primary', 'retap', platform === 'android' ? 'adb' : 'maestro'] });
+}
 export function createDeviceFillHandler() {
     return withSession(async (args) => {
         const ref = args.ref.startsWith('@') ? args.ref : `@${args.ref}`;
-        const needsWorkaround = isAndroidSession() && (args.text.length > ANDROID_FILL_MAX_SAFE_LEN ||
+        const androidSession = isAndroidSession();
+        const needsAndroidWorkaround = androidSession && (args.text.length > ANDROID_FILL_MAX_SAFE_LEN ||
             ANDROID_UNSAFE_CHARS.test(args.text));
-        if (needsWorkaround) {
+        // Android workaround path: press + chunked adb input. Short-circuits — no fallback
+        // chain needed because the Android path is already a fallback for agent-device fill.
+        if (needsAndroidWorkaround) {
             const pressResult = await runAgentDevice(['press', ref]);
             if (pressResult.isError)
                 return pressResult;
-            await new Promise((r) => setTimeout(r, 300));
+            await sleep(300);
             return androidClipboardFill(args.text);
         }
-        return runAgentDevice(['fill', ref, args.text]);
+        // G6: Always tap before fill so keyboard focus lands on this @ref, even in sequential
+        // press+fill+press+fill flows where the previous call left focus on a different field.
+        const preTap = await runAgentDevice(['press', ref]);
+        if (preTap.isError) {
+            // If we can't even tap the element, fall straight through to fill — it may still
+            // work via the fast-runner coordinate path, and we want its error message, not ours.
+        }
+        else {
+            await sleep(FOCUS_DELAY_MS);
+        }
+        const primary = await runAgentDevice(['fill', ref, args.text]);
+        if (!primary.isError) {
+            return primary;
+        }
+        // G4: Fallback chain for "no focused text input to clear" and similar focus errors.
+        if (!isNoFocusedInputError(primary)) {
+            return primary;
+        }
+        // Fallback 1: coordinate re-tap + retry fill. Re-tap gives the UI another chance
+        // to propagate focus from a wrapping Pressable to the inner TextInput.
+        const retryTap = await runAgentDevice(['press', ref]);
+        if (!retryTap.isError) {
+            await sleep(300);
+            const retry = await runAgentDevice(['fill', ref, args.text]);
+            if (!retry.isError) {
+                // Re-wrap the okResult to attach the fallback marker.
+                try {
+                    const envelope = JSON.parse(retry.content[0].text);
+                    return okResult(envelope.data, { meta: { fallbackUsed: 'retap' } });
+                }
+                catch {
+                    return retry;
+                }
+            }
+        }
+        // Fallback 2: platform-specific last resort.
+        if (androidSession) {
+            const adbResult = await androidClipboardFill(args.text);
+            if (!adbResult.isError) {
+                try {
+                    const envelope = JSON.parse(adbResult.content[0].text);
+                    return okResult(envelope.data, { meta: { fallbackUsed: 'adb' } });
+                }
+                catch {
+                    return adbResult;
+                }
+            }
+        }
+        // Fallback 3: Maestro inputText (iOS, or Android if adb fallback also failed).
+        const platform = androidSession ? 'android' : 'ios';
+        return maestroFillFallback(ref, args.text, platform);
     });
 }
 // Default screen dimensions for common devices — used when screen rect cache is empty.
@@ -215,4 +337,41 @@ export function createDevicePinchHandler() {
 // --- Back ---
 export function createDeviceBackHandler() {
     return withSession(() => runAgentDevice(['back']));
+}
+// --- Focus Next (keyboard Next/Return button) ---
+// Label priority order: "Go" and "Done" first because they are less likely to
+// appear on in-app navigation buttons than "Next", reducing false-positive taps
+// on wizard/form navigation buttons. Callers with a visible in-app "Next" button
+// should use device_press on the next input @ref directly instead of this tool.
+const NEXT_KEY_LABELS = ['Go', 'Done', 'Return', 'Next'];
+export function createDeviceFocusNextHandler() {
+    return withSession(async () => {
+        // Single snapshot + local scan beats iterating agent-device find calls.
+        // Benchmark data: 4 serial finds = 10-22s on no-keyboard case; single
+        // snapshot = 3-5s on the same case. Also more reliable — one accessibility
+        // query races keyboard animations less than four sequential queries.
+        const nodes = await fetchSnapshotNodes();
+        if (!nodes) {
+            return failResult('Snapshot unavailable — cannot look for keyboard key. Retry after device_snapshot action=open/snapshot.', { code: 'SNAPSHOT_UNAVAILABLE' });
+        }
+        for (const label of NEXT_KEY_LABELS) {
+            const match = nodes.find((n) => n.label === label);
+            if (!match)
+                continue;
+            const pressResult = await runAgentDevice(['press', `@${match.ref}`]);
+            if (pressResult.isError)
+                continue; // Match found but tap failed — try next label
+            try {
+                const envelope = JSON.parse(pressResult.content[0].text);
+                return okResult(envelope.data, { meta: { keyUsed: label, ref: match.ref } });
+            }
+            catch {
+                return pressResult;
+            }
+        }
+        return failResult(`No keyboard ${NEXT_KEY_LABELS.join('/')} key visible in the accessibility tree. Tried: ${NEXT_KEY_LABELS.join(', ')}`, {
+            code: 'KEYBOARD_NEXT_NOT_FOUND',
+            hint: 'Keyboard may be dismissed, or the field may be the last in the form. If an in-app "Next" button is visible, prefer device_press on the next input @ref directly.',
+        });
+    });
 }

@@ -1,0 +1,104 @@
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+import { existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { resolveBundleId, readExpoSlug } from './project-config.js';
+
+const execFile = promisify(execFileCb);
+
+export interface MaestroInvokeOptions {
+  platform: 'ios' | 'android';
+  appId?: string;
+  timeoutMs?: number;
+  slug?: string;
+}
+
+// Escape a user-supplied string for safe embedding inside a double-quoted YAML scalar.
+// Handles backslash, double quote, and control characters that would break the scalar.
+// NOTE: this is intended for values that go into `text: "..."` / `id: "..."` contexts —
+// not for block scalars or unquoted values.
+export function yamlEscape(s: string): string {
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+}
+
+export interface MaestroInvokeResult {
+  passed: boolean;
+  output: string;
+  flowFile: string;
+  error?: string;
+}
+
+export function getMaestroRunnerPath(): string | null {
+  const path = join(homedir(), '.maestro-runner', 'bin', 'maestro-runner');
+  return existsSync(path) ? path : null;
+}
+
+export async function runMaestroInline(
+  yaml: string,
+  opts: MaestroInvokeOptions,
+): Promise<MaestroInvokeResult> {
+  const runnerPath = getMaestroRunnerPath();
+  if (!runnerPath) {
+    return {
+      passed: false,
+      output: '',
+      flowFile: '',
+      error: 'maestro-runner not found. Install: curl -fsSL https://open.devicelab.dev/install/maestro-runner | bash',
+    };
+  }
+
+  const appId = opts.appId ?? resolveBundleId(opts.platform) ?? readExpoSlug() ?? '';
+  const header = appId ? `appId: ${appId}\n---\n` : '---\n';
+  const content = header + yaml;
+  const flowFile = join(tmpdir(), `rn-maestro-invoke-${opts.slug ?? 'flow'}-${Date.now()}.yaml`);
+
+  try {
+    writeFileSync(flowFile, content, 'utf-8');
+  } catch (err) {
+    return {
+      passed: false,
+      output: '',
+      flowFile,
+      error: `Failed to write flow file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  const timeout = opts.timeoutMs ?? 30_000;
+
+  try {
+    const { stdout, stderr } = await execFile(
+      runnerPath,
+      ['--platform', opts.platform, 'test', flowFile],
+      { timeout, encoding: 'utf8' },
+    );
+    const output = (stdout + '\n' + stderr).trim();
+    const passed = !output.includes('FAILED') && !output.includes('Error:');
+    return { passed, output, flowFile };
+  } catch (err) {
+    // execFile errors carry stdout/stderr from the failed child process. When
+    // Maestro exits non-zero because an assertion failed (e.g. "Element not found:
+    // 'Foo'"), that is a NORMAL test outcome — not a runner crash — and the
+    // details live in the captured stdout. Route those through `passed: false`
+    // with `output` populated so callers can distinguish "the test ran and the
+    // element wasn't there" (warnable) from "maestro-runner itself crashed"
+    // (failure). Only when there's truly no captured output do we surface the
+    // raw exec error message.
+    const errObj = err as { stdout?: string; stderr?: string; message?: string; killed?: boolean };
+    const capturedOutput = ((errObj.stdout ?? '') + '\n' + (errObj.stderr ?? '')).trim();
+    if (errObj.killed) {
+      // Timeout — always a hard error, caller should treat as runner failure.
+      return { passed: false, output: capturedOutput, flowFile, error: `Maestro timed out after ${timeout}ms` };
+    }
+    if (capturedOutput) {
+      return { passed: false, output: capturedOutput, flowFile };
+    }
+    const msg = errObj.message ?? String(err);
+    return { passed: false, output: '', flowFile, error: msg.slice(0, 500) };
+  }
+}
