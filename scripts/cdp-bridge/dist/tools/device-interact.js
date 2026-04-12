@@ -137,19 +137,38 @@ export function createDeviceLongPressHandler() {
         return Promise.resolve(failResult('Provide either ref or x+y coordinates'));
     });
 }
-// Exported for tests. `adb shell <argv...>` joins argv with spaces and sends
-// the result to the Android remote shell as a command line — it does NOT
-// per-argument-escape. Shell metacharacters in user text ($, `, &, |, <, >,
-// (, ), ;, \) would therefore be interpreted by the remote shell and break
-// the `input text` call. The correct defense is to wrap each chunk in a
-// single-quoted shell string (which prevents all metacharacter expansion)
-// and escape embedded single quotes via the POSIX `'\''` dance. Empirically
-// verified correct on Pixel 9 Pro API 37 + adb 1.0.41 in verify-b96.mjs
-// (13/14 cases pass; the only failure is B97 — literal `%s` in user text
-// becoming a space via the `input text` convention).
-//
-// Returns the full argv tail (the `input text ...` part), so callers pass
-// it directly to `execFile('adb', [...serial, ...returnValue])`.
+// Splits a chunk into segments where no segment, after space→%s encoding,
+// will contain a user-literal %s. Android's `input text` interprets %s as
+// space — the ONLY special sequence it recognizes (empirically verified:
+// %%, %p, %n, %d, %t, %S, lone %, trailing % all pass through literally).
+// There is no escape mechanism (no %% → %, no \%s). The fix (B97) is to
+// ensure % and s from user text never appear adjacent in the same `input
+// text` call: send % alone, then s... in the next call.
+export function splitChunkAroundPercentS(chunk) {
+    const parts = chunk.split('%s');
+    if (parts.length === 1)
+        return [chunk];
+    const segments = [];
+    for (let i = 0; i < parts.length; i++) {
+        if (i > 0) {
+            segments.push('%');
+            const rest = 's' + parts[i];
+            if (rest.length > 0)
+                segments.push(rest);
+        }
+        else if (parts[i].length > 0) {
+            segments.push(parts[i]);
+        }
+    }
+    return segments;
+}
+// Builds the argv tail for a single `input text` call. The chunk MUST NOT
+// contain a user-literal %s — use splitChunkAroundPercentS first.
+// Wraps in a single-quoted shell string because `adb shell <argv...>` joins
+// argv with spaces and sends to the Android remote shell as a raw command
+// line (it does NOT per-argument-escape). Single-quote wrapping prevents
+// shell metacharacter expansion ($, `, &, |, <, >, etc.); embedded single
+// quotes are escaped via the POSIX `'\''` dance.
 export function buildAdbInputTextArgv(chunk) {
     const escaped = chunk
         .replace(/ /g, '%s')
@@ -162,8 +181,11 @@ async function androidClipboardFill(text) {
         const serial = getAdbSerial();
         for (let i = 0; i < text.length; i += ANDROID_INPUT_CHUNK_SIZE) {
             const chunk = text.slice(i, i + ANDROID_INPUT_CHUNK_SIZE);
-            const argvTail = buildAdbInputTextArgv(chunk);
-            await execFile('adb', [...serial, ...argvTail], { timeout: 10000 });
+            const segments = splitChunkAroundPercentS(chunk);
+            for (const seg of segments) {
+                const argvTail = buildAdbInputTextArgv(seg);
+                await execFile('adb', [...serial, ...argvTail], { timeout: 10000 });
+            }
         }
         return okResult({ filled: true, method: 'adb-chunked-input', length: text.length });
     }

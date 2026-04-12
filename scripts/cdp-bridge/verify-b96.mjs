@@ -16,7 +16,7 @@
 //   cd scripts/cdp-bridge && npm run build && node verify-b96.mjs
 
 import { execFileSync } from 'node:child_process';
-import { buildAdbInputTextArgv } from './dist/tools/device-interact.js';
+import { buildAdbInputTextArgv, splitChunkAroundPercentS } from './dist/tools/device-interact.js';
 
 function sh(cmd, args) {
   return execFileSync(cmd, args, { encoding: 'utf8' });
@@ -69,9 +69,12 @@ function runOne(input) {
   let firstError = null;
   for (let i = 0; i < input.length; i += CHUNK) {
     const chunk = input.slice(i, i + CHUNK);
-    const argv = buildAdbInputTextArgv(chunk);
-    const r = adbOk(argv);
-    if (!r.ok && !firstError) firstError = r.err;
+    const segments = splitChunkAroundPercentS(chunk);
+    for (const seg of segments) {
+      const argv = buildAdbInputTextArgv(seg);
+      const r = adbOk(argv);
+      if (!r.ok && !firstError) firstError = r.err;
+    }
   }
   sh('sh', ['-c', 'sleep 0.7']);
   const actual = readFocusedField();
@@ -140,7 +143,4 @@ for (const tc of TEST_INPUTS) {
 
 console.log();
 console.log(`${pass}/${TEST_INPUTS.length} pass, ${fail} fail`);
-if (fail > 0) {
-  console.log('(B97 %s → space is an expected known failure)');
-  process.exit(fail === 1 ? 0 : 1);
-}
+if (fail > 0) process.exit(1);

@@ -1,11 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAdbInputTextArgv } from '../dist/tools/device-interact.js';
+import { buildAdbInputTextArgv, splitChunkAroundPercentS } from '../dist/tools/device-interact.js';
 
-// Empirically verified correct on Pixel 9 Pro API 37 + adb 1.0.41 via
-// `verify-b96.mjs` (13/14 cases pass end-to-end). The one failing case is
-// B97 (literal `%s` in user text → space), which is pre-existing and
-// unrelated to the argv shape this file tests.
+// ── buildAdbInputTextArgv ──────────────────────────────────────────────
 
 test('buildAdbInputTextArgv wraps chunk in single-quoted shell literal', () => {
   assert.deepEqual(buildAdbInputTextArgv('hello'), ['shell', 'input', 'text', "'hello'"]);
@@ -58,4 +55,54 @@ test('buildAdbInputTextArgv returns a fresh argv array on each call', () => {
   assert.notEqual(a, b);
   a.push('mutated');
   assert.equal(b.length, 4);
+});
+
+// ── splitChunkAroundPercentS (B97) ─────────────────────────────────────
+
+test('splitChunkAroundPercentS returns chunk as-is when no %s present', () => {
+  assert.deepEqual(splitChunkAroundPercentS('hello'), ['hello']);
+  assert.deepEqual(splitChunkAroundPercentS('a%b'), ['a%b']);
+  assert.deepEqual(splitChunkAroundPercentS('a%Sb'), ['a%Sb']);
+  assert.deepEqual(splitChunkAroundPercentS(''), ['']);
+});
+
+test('splitChunkAroundPercentS splits single %s into [before, "%", "s"+after]', () => {
+  assert.deepEqual(splitChunkAroundPercentS('a%sb'), ['a', '%', 'sb']);
+});
+
+test('splitChunkAroundPercentS handles %s at start', () => {
+  assert.deepEqual(splitChunkAroundPercentS('%sb'), ['%', 'sb']);
+});
+
+test('splitChunkAroundPercentS handles %s at end', () => {
+  assert.deepEqual(splitChunkAroundPercentS('a%s'), ['a', '%', 's']);
+});
+
+test('splitChunkAroundPercentS handles bare %s', () => {
+  assert.deepEqual(splitChunkAroundPercentS('%s'), ['%', 's']);
+});
+
+test('splitChunkAroundPercentS handles two consecutive %s', () => {
+  assert.deepEqual(splitChunkAroundPercentS('a%s%sb'), ['a', '%', 's', '%', 'sb']);
+});
+
+test('splitChunkAroundPercentS handles three %s in mixed text', () => {
+  assert.deepEqual(
+    splitChunkAroundPercentS('x%sy%sz%sw'),
+    ['x', '%', 'sy', '%', 'sz', '%', 'sw'],
+  );
+});
+
+test('splitChunkAroundPercentS preserves spaces (not yet encoded)', () => {
+  assert.deepEqual(splitChunkAroundPercentS('a %s b'), ['a ', '%', 's b']);
+});
+
+test('splitChunkAroundPercentS + buildAdbInputTextArgv produce correct argv sequence', () => {
+  const segments = splitChunkAroundPercentS('hello %s world');
+  const argvs = segments.map(s => buildAdbInputTextArgv(s));
+  assert.deepEqual(argvs, [
+    ['shell', 'input', 'text', "'hello%s'"],
+    ['shell', 'input', 'text', "'%'"],
+    ['shell', 'input', 'text', "'s%sworld'"],
+  ]);
 });
