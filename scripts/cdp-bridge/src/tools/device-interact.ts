@@ -211,21 +211,35 @@ interface FillArgs {
   text: string;
 }
 
+// Exported for tests. `adb shell <argv...>` joins argv with spaces and sends
+// the result to the Android remote shell as a command line — it does NOT
+// per-argument-escape. Shell metacharacters in user text ($, `, &, |, <, >,
+// (, ), ;, \) would therefore be interpreted by the remote shell and break
+// the `input text` call. The correct defense is to wrap each chunk in a
+// single-quoted shell string (which prevents all metacharacter expansion)
+// and escape embedded single quotes via the POSIX `'\''` dance. Empirically
+// verified correct on Pixel 9 Pro API 37 + adb 1.0.41 in verify-b96.mjs
+// (13/14 cases pass; the only failure is B97 — literal `%s` in user text
+// becoming a space via the `input text` convention).
+//
+// Returns the full argv tail (the `input text ...` part), so callers pass
+// it directly to `execFile('adb', [...serial, ...returnValue])`.
+export function buildAdbInputTextArgv(chunk: string): string[] {
+  const escaped = chunk
+    .replace(/ /g, '%s')
+    .replace(/'/g, "'\\''");
+  return ['shell', 'input', 'text', `'${escaped}'`];
+}
+
+const ANDROID_INPUT_CHUNK_SIZE = 10;
+
 async function androidClipboardFill(text: string): Promise<ToolResult> {
   try {
     const serial = getAdbSerial();
-    const chunks = [];
-    for (let i = 0; i < text.length; i += 10) {
-      chunks.push(text.slice(i, i + 10));
-    }
-    for (const chunk of chunks) {
-      // Replace spaces with %s (adb input text convention)
-      // Use single-quoted shell string to prevent Android shell expansion
-      // Single quotes inside the text must be escaped as '\''
-      const escaped = chunk
-        .replace(/ /g, '%s')
-        .replace(/'/g, "'\\''");
-      await execFile('adb', [...serial, 'shell', 'input', 'text', `'${escaped}'`], { timeout: 10000 });
+    for (let i = 0; i < text.length; i += ANDROID_INPUT_CHUNK_SIZE) {
+      const chunk = text.slice(i, i + ANDROID_INPUT_CHUNK_SIZE);
+      const argvTail = buildAdbInputTextArgv(chunk);
+      await execFile('adb', [...serial, ...argvTail], { timeout: 10000 });
     }
     return okResult({ filled: true, method: 'adb-chunked-input', length: text.length });
   } catch (err: unknown) {
