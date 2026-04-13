@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findElement, discoverTestIDs } from '../dist/tools/cross-platform-verify.js';
+import { findElement, discoverTestIDs } from '../../dist/tools/cross-platform-verify.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -50,7 +50,7 @@ test('findElement on empty nodes returns false', () => {
 // ── discoverTestIDs ────────────────────────────────────────────────────
 
 test('discoverTestIDs extracts testIDs from .tsx fixture', () => {
-  const fixtureDir = join(__dirname, 'fixtures', 'scan-test');
+  const fixtureDir = join(__dirname, '..', 'fixtures', 'scan-test');
   const ids = discoverTestIDs(fixtureDir);
   assert.ok(ids.includes('example-screen'), 'should find testID="example-screen"');
   assert.ok(ids.includes('title-text'), 'should find testID="title-text"');
@@ -60,7 +60,7 @@ test('discoverTestIDs extracts testIDs from .tsx fixture', () => {
 });
 
 test('discoverTestIDs returns sorted results', () => {
-  const fixtureDir = join(__dirname, 'fixtures', 'scan-test');
+  const fixtureDir = join(__dirname, '..', 'fixtures', 'scan-test');
   const ids = discoverTestIDs(fixtureDir);
   const sorted = [...ids].sort();
   assert.deepEqual(ids, sorted);

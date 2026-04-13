@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAdbInputTextArgv, splitChunkAroundPercentS } from '../dist/tools/device-interact.js';
+import { buildAdbInputTextArgv, splitChunkAroundPercentS } from '../../dist/tools/device-interact.js';
 
 // ── buildAdbInputTextArgv ──────────────────────────────────────────────
 

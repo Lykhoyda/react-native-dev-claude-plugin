@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/cdp-bridge
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/cdp-bridge/package-lock.json
+
+      - run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Unit tests
+        run: node --test 'test/unit/*.test.js'
+
+      - name: Integration tests
+        run: node --test 'test/integration/*.test.js'
+
+  version-sync:
+    name: Version sync check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/sync-versions.sh
