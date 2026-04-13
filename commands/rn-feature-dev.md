@@ -162,6 +162,26 @@ After implementation, verify the feature live using CDP tools and screenshots.
 
 Run this verification sequence in order. Stop and fix if any step fails.
 
+### GATE: Environment Readiness (CRITICAL — GH #28)
+
+**Before ANY verification, confirm the environment is functional.**
+Call `cdp_status`. If it fails to connect:
+
+1. **DO NOT proceed to verification.** Do not fall back to raw bash commands.
+2. **DO NOT use `xcrun simctl`, `adb`, or `xcodebuild` as substitutes for
+   CDP tools.** These bypass the plugin's connection management and error
+   recovery, and produce a degraded experience.
+3. Instead, tell the user:
+   - "CDP connection failed. Please ensure Metro is running (`npx expo start`
+     or `npx react-native start`) and the app is loaded on a simulator."
+   - "Run `/rn-dev-agent:check-env` to diagnose missing dependencies."
+4. If Metro is running but CDP still fails, check:
+   - Is another debugger connected? (React Native DevTools, Flipper, Chrome)
+   - Is the app on the Dev Client launcher instead of the actual app?
+   - Is the correct platform targeted? (`cdp_connect(platform="ios")`)
+
+**Only proceed to Step 0 after `cdp_status` returns `ok: true`.**
+
 ### Step 0: Ensure Simulator & Navigate to Feature
 
 First, verify the simulator is running and CDP is connected:
