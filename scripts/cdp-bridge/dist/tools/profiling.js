@@ -18,10 +18,56 @@ export function createHeapUsageHandler(getClient) {
 }
 export function createCpuProfileHandler(getClient) {
     return withConnection(getClient, async (args, client) => {
-        if (!client.profilerAvailable) {
-            return failResult('Profiler domain is not available on this Hermes target.', { hint: 'Check cdp_status domains.profiler' });
-        }
         const duration = Math.min(Math.max(args.durationMs ?? 3000, 500), 30000);
+        // D597: JS-based sampling fallback when Profiler domain unavailable
+        if (!client.profilerAvailable) {
+            try {
+                const sampleScript = `
+          (function() {
+            var samples = {};
+            var count = 0;
+            var interval = setInterval(function() {
+              try {
+                var stack = new Error().stack || '';
+                var lines = stack.split('\\n').slice(1, 6);
+                lines.forEach(function(line) {
+                  var match = line.match(/at\\s+(.+?)\\s*\\(/);
+                  var name = match ? match[1].trim() : line.trim();
+                  if (name && name !== 'anonymous' && name !== '') {
+                    samples[name] = (samples[name] || 0) + 1;
+                  }
+                });
+              } catch(e) {}
+              count++;
+              if (count >= ${Math.floor(duration / 50)}) {
+                clearInterval(interval);
+                globalThis.__RN_AGENT_PROFILE_RESULT__ = JSON.stringify(samples);
+              }
+            }, 50);
+            return 'sampling';
+          })()
+        `;
+                await client.evaluate(sampleScript);
+                await new Promise(r => setTimeout(r, duration + 200));
+                const result = await client.evaluate('globalThis.__RN_AGENT_PROFILE_RESULT__ || "{}"');
+                void client.evaluate('delete globalThis.__RN_AGENT_PROFILE_RESULT__');
+                const samples = JSON.parse(String(result.value || '{}'));
+                const hotFunctions = Object.entries(samples)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 20)
+                    .map(([name, hitCount]) => ({ name, hitCount, url: '', line: 0 }));
+                return okResult({
+                    durationMs: duration,
+                    nodeCount: hotFunctions.length,
+                    hotFunctions,
+                    source: 'js-sampling',
+                    note: 'Approximate — using Error().stack sampling (Profiler domain unavailable)',
+                });
+            }
+            catch (err) {
+                return failResult(`JS-based profiling failed: ${err instanceof Error ? err.message : err}`);
+            }
+        }
         try {
             await client.send('Profiler.enable', undefined);
             await client.send('Profiler.start', undefined);

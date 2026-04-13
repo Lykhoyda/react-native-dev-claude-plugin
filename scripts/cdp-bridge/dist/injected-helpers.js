@@ -1235,6 +1235,11 @@ export const NETWORK_HOOK_SCRIPT = `
   if (globalThis.__RN_AGENT_NETWORK_HOOK__) return;
   globalThis.__RN_AGENT_NETWORK_HOOK__ = true;
 
+  // D597: Response body cache for hook mode — enables cdp_network_body on RN < 0.83
+  var bodyCache = new Map();
+  var MAX_BODIES = 50;
+  globalThis.__RN_AGENT_RESPONSE_BODIES__ = bodyCache;
+
   var origFetch = globalThis.fetch;
   globalThis.fetch = function(url, opts) {
     var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1252,6 +1257,16 @@ export const NETWORK_HOOK_SCRIPT = `
             id: id, status: response.status, duration_ms: Date.now() - start
           });
         }
+        // Cache cloned response body for cdp_network_body
+        try {
+          response.clone().text().then(function(text) {
+            if (bodyCache.size >= MAX_BODIES) {
+              var oldest = bodyCache.keys().next().value;
+              bodyCache.delete(oldest);
+            }
+            bodyCache.set(id, text);
+          }).catch(function() {});
+        } catch(e) {}
         return response;
       }).catch(function(err) {
         if (globalThis.__RN_AGENT_NETWORK_CB__) {
