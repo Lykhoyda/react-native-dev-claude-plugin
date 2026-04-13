@@ -62,6 +62,14 @@ claude
 
 On startup the plugin auto-detects your React Native project and installs [maestro-runner](https://github.com/devicelab-dev/maestro-runner) and [agent-device](https://github.com/nicklama/agent-device) for device interactions.
 
+Run the setup check to verify everything is ready:
+
+```
+/rn-dev-agent:setup
+```
+
+This checks all 9 prerequisites (Node.js, CDP bridge, agent-device, maestro-runner, simulator, emulator, Metro, CDP connection, ffmpeg). If anything is missing, it retries installation automatically and gives you manual instructions as a fallback.
+
 Then tell Claude what to build:
 
 ```
