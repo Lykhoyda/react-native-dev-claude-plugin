@@ -72,6 +72,7 @@ async function buildStatusResult(client: CDPClient): Promise<StatusResult> {
       profiler: client.profilerAvailable,
       heapProfiler: client.heapProfilerAvailable,
     },
+    reconnect: client.reconnectState,
   };
 }
 

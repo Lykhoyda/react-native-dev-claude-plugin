@@ -94,6 +94,11 @@ export interface StatusResult {
     profiler: boolean;
     heapProfiler: boolean;
   };
+  reconnect: {
+    active: boolean;
+    lastAttempt: string | null;
+    attemptCount: number;
+  };
 }
 
 export interface EvaluateResult {

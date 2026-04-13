@@ -13,6 +13,9 @@ import { createNavigationStateHandler } from './tools/navigation-state.js';
 import { createErrorLogHandler } from './tools/error-log.js';
 import { createNetworkLogHandler } from './tools/network-log.js';
 import { createNetworkBodyHandler } from './tools/network-body.js';
+import { createHeapUsageHandler, createCpuProfileHandler } from './tools/profiling.js';
+import { createObjectInspectHandler } from './tools/object-inspect.js';
+import { createExceptionBreakpointHandler } from './tools/exception-breakpoint.js';
 import { createConsoleLogHandler } from './tools/console-log.js';
 import { createStoreStateHandler } from './tools/store-state.js';
 import { createDispatchHandler } from './tools/dispatch.js';
@@ -195,6 +198,45 @@ trackedTool(
       .describe('Max body length to return (default 10000 chars). Truncated if longer.'),
   },
   createNetworkBodyHandler(getClient),
+);
+
+trackedTool(
+  'cdp_heap_usage',
+  'Get current JS heap memory usage. Single fast CDP call — useful before/after operations to detect memory leaks. Returns used/total in bytes and MB.',
+  {},
+  createHeapUsageHandler(getClient),
+);
+
+trackedTool(
+  'cdp_cpu_profile',
+  'Record a CPU profile for a specified duration. Returns the top hot functions sorted by hit count. Requires Profiler domain (check cdp_status domains.profiler).',
+  {
+    durationMs: z.number().int().min(500).max(30000).default(3000).optional()
+      .describe('Profile duration in ms (default 3000, max 30000)'),
+  },
+  createCpuProfileHandler(getClient),
+);
+
+trackedTool(
+  'cdp_object_inspect',
+  'Inspect a JS object by expression without flattening to JSON. Uses Runtime.getProperties for lazy, handle-based inspection. Good for large objects, cyclic refs, class instances.',
+  {
+    expression: z.string().describe('JS expression to evaluate and inspect (e.g. "globalThis.__REDUX_STORE__")'),
+    depth: z.number().int().min(0).max(3).default(1).optional().describe('Property inspection depth (default 1, max 3)'),
+    maxProperties: z.number().int().min(1).max(100).default(20).optional().describe('Max properties per level (default 20)'),
+  },
+  createObjectInspectHandler(getClient),
+);
+
+trackedTool(
+  'cdp_exception_breakpoint',
+  'Set the debugger to pause on exceptions. With durationMs: records exceptions for that period then auto-disables. Without durationMs: toggles the breakpoint state (call with state="none" to disable).',
+  {
+    state: z.enum(['none', 'uncaught', 'all']).default('uncaught').describe('Exception pause mode: none (off), uncaught (default), all'),
+    durationMs: z.number().int().min(1000).max(30000).optional()
+      .describe('Auto-capture duration in ms. If set, records exceptions then disables.'),
+  },
+  createExceptionBreakpointHandler(getClient),
 );
 
 trackedTool(

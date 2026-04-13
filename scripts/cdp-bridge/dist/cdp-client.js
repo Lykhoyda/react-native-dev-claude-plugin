@@ -64,6 +64,11 @@ export class CDPClient {
     _logDomainEnabled = false;
     _profilerAvailable = false;
     _heapProfilerAvailable = false;
+    // Tier 3: scriptParsed cache (D592)
+    _scripts = new Map();
+    // Tier 3: reconnection state visibility (D596)
+    _lastReconnectAttempt = null;
+    _reconnectAttemptCount = 0;
     constructor(port) {
         this._port = port ?? 8081;
         this._consoleBuffer = new RingBuffer(200);
@@ -86,6 +91,10 @@ export class CDPClient {
     get logDomainEnabled() { return this._logDomainEnabled; }
     get profilerAvailable() { return this._profilerAvailable; }
     get heapProfilerAvailable() { return this._heapProfilerAvailable; }
+    get scripts() { return this._scripts; }
+    get reconnectState() {
+        return { active: this.reconnecting, lastAttempt: this._lastReconnectAttempt, attemptCount: this._reconnectAttemptCount };
+    }
     helperExpr(call) {
         return this._bridgeDetected ? `__RN_DEV_BRIDGE__.${call}` : `__RN_AGENT.${call}`;
     }
@@ -395,6 +404,7 @@ export class CDPClient {
             this._logDomainEnabled = false;
             this._profilerAvailable = false;
             this._heapProfilerAvailable = false;
+            this._scripts.clear();
             if (this.ws) {
                 this.ws.removeAllListeners();
                 if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
@@ -422,6 +432,7 @@ export class CDPClient {
         this._logDomainEnabled = false;
         this._profilerAvailable = false;
         this._heapProfilerAvailable = false;
+        this._scripts.clear();
         this.clearActiveFlag();
         this.stopBackgroundPoll();
         if (this.ws) {
@@ -525,6 +536,16 @@ export class CDPClient {
                 throw new Error('Client disposed or preempted during connection');
             try {
                 await this.connectWs(target.webSocketDebuggerUrl);
+                // D594: Early stale-target detection — quick probe before full setup
+                try {
+                    await this.sendWithTimeout('Runtime.evaluate', {
+                        expression: '1+1',
+                        returnByValue: true,
+                    }, CDP_TIMEOUT_FAST);
+                }
+                catch {
+                    throw new Error('Target failed pre-flight probe (1+1) — likely a dead JS context');
+                }
                 this._connectedTarget = target;
                 await this.setup();
                 return;
@@ -686,6 +707,7 @@ export class CDPClient {
         this._profilerAvailable = profilerProbe.status === 'fulfilled' && profilerProbe.value === true;
         this._heapProfilerAvailable = heapProbe.status === 'fulfilled' && heapProbe.value === true;
         this.eventHandlers.clear();
+        this._scripts.clear();
         this.setupEventHandlers();
         await this.waitForReact(REACT_READY_TIMEOUT_MS);
         const helperResult = await this.evaluate(INJECTED_HELPERS);
@@ -757,6 +779,18 @@ export class CDPClient {
                 entry.duration_ms = Date.now() - new Date(entry.timestamp).getTime();
             }
         });
+        // D592: Cache Debugger.scriptParsed events for source lookup
+        this.eventHandlers.set('Debugger.scriptParsed', (params) => {
+            const p = params;
+            if (p.scriptId && p.url) {
+                this._scripts.set(p.scriptId, {
+                    scriptId: p.scriptId,
+                    url: p.url,
+                    startLine: p.startLine ?? 0,
+                    endLine: p.endLine ?? 0,
+                });
+            }
+        });
         // D588: Buffer Log.entryAdded events for pre-helper diagnostics
         this.eventHandlers.set('Log.entryAdded', (params) => {
             const p = params;
@@ -817,6 +851,7 @@ export class CDPClient {
         this._logDomainEnabled = false;
         this._profilerAvailable = false;
         this._heapProfilerAvailable = false;
+        this._scripts.clear();
         if (this.disposed || this.reconnecting)
             return;
         logger.info('CDP', `WebSocket closed (code ${code}), starting reconnect`);
@@ -836,6 +871,8 @@ export class CDPClient {
     async reconnect() {
         await this.sleep(RECONNECT_DELAY_MS);
         for (let i = 0; i < RECONNECT_ATTEMPTS; i++) {
+            this._reconnectAttemptCount = i + 1;
+            this._lastReconnectAttempt = new Date().toISOString();
             if (this.disposed || this._softReconnectRequested) {
                 this.reconnecting = false;
                 return;

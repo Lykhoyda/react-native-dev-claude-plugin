@@ -61,6 +61,7 @@ async function buildStatusResult(client) {
             profiler: client.profilerAvailable,
             heapProfiler: client.heapProfilerAvailable,
         },
+        reconnect: client.reconnectState,
     };
 }
 export function createStatusHandler(getClient, setClient, createClient) {
