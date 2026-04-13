@@ -220,11 +220,8 @@ cdp_error_log(clear=true)
 ```
 
 Then capture the current screen state:
-```bash
-# iOS
-xcrun simctl io booted screenshot --type=jpeg /tmp/rn-feature-verify.jpg
-# Android
-adb exec-out screencap -p > /tmp/rn-feature-verify.png
+```
+device_screenshot(path="/tmp/rn-feature-verify.jpg")
 ```
 
 ### Step 2: Health Check
@@ -452,11 +449,8 @@ in the table, execute in order:
    - Wait 1-2 seconds for state to settle (or use `device_snapshot` to confirm)
 
 2. **Capture the screenshot** using the exact filename from the table:
-   ```bash
-   # iOS
-   xcrun simctl io booted screenshot --type=jpeg docs/proof/<feature-slug>/<filename>
-   # Android
-   adb exec-out screencap -p > docs/proof/<feature-slug>/<filename>
+   ```
+   device_screenshot(path="docs/proof/<feature-slug>/<filename>")
    ```
 
 3. **Verify the expected state** as specified in the table:

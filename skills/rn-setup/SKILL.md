@@ -23,10 +23,10 @@ This skill checks every prerequisite and installs missing dependencies.
 node --version
 ```
 **Required:** Node.js >= 22 LTS (even-numbered release).
-If odd-numbered (e.g., v25) or < 22: warn the user to install Node 22 via nvm.
-```bash
-nvm install 22 && nvm use 22
-```
+If odd-numbered (e.g., v25) or < 22: warn the user to install Node 22.
+- If `nvm` is installed (`command -v nvm`): `nvm install 22 && nvm use 22`
+- If `fnm` is installed: `fnm install 22 && fnm use 22`
+- Otherwise: download from https://nodejs.org/en/download/ or `brew install node@22`
 
 ### 2. CDP bridge dependencies
 ```bash
@@ -95,8 +95,8 @@ Present results as a table:
 | CDP connection | CONNECTED | — |
 | ffmpeg | OK (v7.1) | — |
 
-If any critical check fails (CDP bridge, Metro, or simulator), provide
-step-by-step instructions to fix it. Do not proceed with feature
+If any critical check fails (CDP bridge, agent-device, Metro, or simulator),
+provide step-by-step instructions to fix it. Do not proceed with feature
 development until all critical checks pass.
 
 ## After setup

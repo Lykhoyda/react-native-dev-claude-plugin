@@ -24,7 +24,8 @@
     "./skills/rn-device-control",
     "./skills/rn-testing",
     "./skills/rn-debugging",
-    "./skills/rn-best-practices"
+    "./skills/rn-best-practices",
+    "./skills/rn-setup"
   ],
   "agents": [
     "./agents/rn-tester.md",
@@ -45,7 +46,8 @@
     "./commands/rn-agent-import.md",
     "./commands/rn-agent-health.md",
     "./commands/nav-graph.md",
-    "./commands/send-feedback.md"
+    "./commands/send-feedback.md",
+    "./commands/setup.md"
   ],
   "userConfig": {
     "RN_METRO_PORT": {
