@@ -4,6 +4,17 @@ All notable changes to rn-dev-agent will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.19.2] — 2026-04-13
+
+### Fixed
+- **MCP server reconnection failure after upgrade** (#30) — Renaming the `mcpServers` key from `rn-dev-agent-cdp` to `cdp` in v0.19.1 broke Claude Code session reconnection. Added upgrade detection in SessionStart hook: compares plugin version against last-seen version, outputs restart notice on upgrade.
+
+### Added
+- **Convention D605:** MCP server keys in `plugin.json` must never be renamed in minor or patch versions. Major versions may rename with explicit migration notes.
+
+### Migration from v0.19.1
+If CDP tools fail after upgrading, restart Claude Code to reinitialize MCP servers. This is a one-time issue caused by the server key rename in v0.19.1.
+
 ## [0.9.0] — 2026-04-02
 
 ### Added

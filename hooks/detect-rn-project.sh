@@ -24,6 +24,18 @@ if [ "$has_rn_config" = true ]; then
   # Resolve plugin root (hooks/ is one level down from plugin root)
   PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+  # Detect plugin upgrade — warn user to restart Claude Code if MCP server keys may have changed (GH #30, D605)
+  PLUGIN_VERSION=$(jq -r '.version // "unknown"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
+  LAST_VERSION_FILE="${TMPDIR:-/tmp}/rn-dev-agent-last-version"
+  if [ -f "$LAST_VERSION_FILE" ]; then
+    LAST_VERSION=$(cat "$LAST_VERSION_FILE" 2>/dev/null || echo "")
+    if [ -n "$LAST_VERSION" ] && [ "$LAST_VERSION" != "$PLUGIN_VERSION" ]; then
+      echo "NOTICE: rn-dev-agent upgraded from v${LAST_VERSION} to v${PLUGIN_VERSION}. If MCP tools fail, restart Claude Code to reinitialize MCP servers."
+      echo ""
+    fi
+  fi
+  echo "$PLUGIN_VERSION" > "$LAST_VERSION_FILE" 2>/dev/null || true
+
   # Warn if Node.js is not an LTS version (even numbers: 22, 24, ...)
   NODE_MAJOR=$(node -e 'console.log(process.versions.node.split(".")[0])' 2>/dev/null)
   if [ -n "$NODE_MAJOR" ] && [ "$((NODE_MAJOR % 2))" -ne 0 ]; then

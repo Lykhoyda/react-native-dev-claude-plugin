@@ -9,6 +9,14 @@ All notable changes to rn-dev-agent will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.19.2] — 2026-04-13
+
+### Fixed
+- **MCP server reconnection failure after upgrade** (#30) — Renaming the `mcpServers` key in v0.19.1 broke Claude Code session reconnection. Added upgrade detection in SessionStart hook with restart notice.
+
+### Added
+- **Convention D605:** MCP server keys must never be renamed in minor or patch versions.
+
 ## [0.9.0] — 2026-04-02
 
 ### Added
