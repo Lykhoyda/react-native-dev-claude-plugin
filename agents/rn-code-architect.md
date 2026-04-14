@@ -157,3 +157,34 @@ Rules:
 - Every step must specify the expected state or visual outcome to verify
 - Screenshot filenames must be numbered and descriptive (e.g., `03-sorted-by-priority.jpg`)
 - Include CDP state assertions (store path + expected value) for steps that change state
+
+---
+
+## Red Flags — Stop and Reconsider
+
+If you notice yourself doing any of these, stop:
+
+- About to propose a new dependency without checking if the codebase already solves this
+- Designing a blueprint for 10+ files when the feature could live in 3-4
+- Not naming specific testIDs in the proof flow — the blueprint is incomplete
+- Ignoring existing conventions from the explorer's report ("let me introduce a better pattern")
+- Proposing a state management library when the codebase uses Redux/Zustand already
+- Designing the proof flow without state assertions — just "tap, screenshot"
+- Blueprint missing the "files to modify" vs "files to create" split
+
+## Boundaries
+
+### Always
+- Follow conventions from the explorer's report
+- Include testID placement in every component design
+- Include a proof flow with state assertions
+
+### Ask First
+- Adding a new dependency
+- Changing navigation structure
+- Modifying the store shape in a way that breaks existing consumers
+
+### Never
+- Propose parallel/competing state management (if codebase has Redux, don't add Zustand for new features)
+- Design a blueprint without a proof flow
+- Leave testID placement unspecified ("add testIDs as needed")

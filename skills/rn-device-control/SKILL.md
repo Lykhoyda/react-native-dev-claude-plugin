@@ -352,3 +352,25 @@ If agent-device is unavailable, fall back to:
 | jq | EAS profile parsing (optional, falls back to node) | `brew install jq` |
 | eas-cli | EAS builds (optional) | `npm install -g eas-cli` |
 | Expo CLI | Local builds + Metro | Included with Expo projects (`npx expo`) |
+
+---
+
+## Common Rationalizations
+
+Device control commands are low-level — agents reach for bash too readily.
+
+| Excuse | Reality |
+|--------|---------|
+| "I need a screenshot fast — `xcrun simctl io booted screenshot` is simpler" | `device_screenshot` handles path conventions, format fallbacks, and works cross-platform with the same call. Use it. |
+| "I'll `xcrun simctl launch` to restart — faster than going through the plugin" | `cdp_reload` (full=true) is the supported path, auto-reconnects CDP, and re-injects helpers. `simctl launch` loses the CDP session. |
+| "I'll `adb shell input text` directly instead of `device_fill`" | `device_fill` handles percent-escaping (B97), `%s` literals, and shell quoting. Direct `adb input text` breaks on spaces and special characters silently. |
+| "I need to read UI — `xcrun simctl ui` gives hierarchy" | For React components, use `cdp_component_tree`. For the native a11y tree, use `device_snapshot`. Both give structured data agents can filter — raw `simctl ui` output is lossy. |
+| "The simulator isn't booted, I'll `xcrun simctl boot` quickly" | Fine for one-off boots. But if you're booting to run the agent, `device_list` first — the user may already have a target booted, and you'd boot a different one. |
+
+## Red Flags — Stop and Reconsider
+
+- Reaching for `xcrun simctl` or `adb` when a `device_*` MCP tool exists
+- Calling `simctl io booted screenshot` — use `device_screenshot`
+- Calling `adb shell input text` — use `device_fill`
+- Booting a simulator without first running `device_list` (user may have one booted)
+- Running bash commands in a tight loop — use `device_batch` instead

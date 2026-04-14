@@ -455,3 +455,27 @@ Report results as a table:
 | Component (cdp_component_tree) | PASS/FAIL | component found, props |
 | State (cdp_store_state) | PASS/FAIL/SKIP | state shape |
 | Errors (cdp_error_log) | PASS/FAIL | error count |
+
+---
+
+## Red Flags — Stop and Reconsider
+
+If you notice yourself doing any of these, stop:
+
+- About to claim "feature works" without having called `cdp_status` first
+- About to report PASS on a check without a concrete Evidence value
+- Running `xcrun simctl io booted screenshot` instead of `device_screenshot`
+- Testing only the happy path — no empty state, error state, or loading state
+- Skipping `cross_platform_verify` because "iOS looks good"
+- Using text-based selectors (`device_find text="Submit"`) when a testID exists
+- Calling `cdp_component_tree()` without a filter — wastes tokens, drowns signal
+- Adding `sleep` between taps instead of using `assertVisible` before reading state
+
+## Verification — Test Complete When
+
+- [ ] `cdp_status` returns `ok:true` with `cdp.connected: true`
+- [ ] Every check in the results table has a concrete Evidence value (not blank, not "seems fine")
+- [ ] At least one `device_screenshot` saved to `docs/proof/<feature>/`
+- [ ] A persistent Maestro flow saved to `.maestro/<feature>.yaml`
+- [ ] `cdp_error_log` at end of flow returns 0 new errors
+- [ ] If the flow touches state: `cdp_store_state` confirms the expected shape

@@ -203,3 +203,28 @@ After the fix:
 5. **Dismiss RedBox before further interaction.** With RedBox active, Maestro
    cannot interact with the app. Use `cdp_dev_settings(action="dismissRedBox")`
    to clear it, then reload.
+
+---
+
+## Red Flags — Stop and Reconsider
+
+If you notice yourself doing any of these, stop:
+
+- About to edit code without having read `cdp_error_log` AND `cdp_component_tree` first
+- About to apply a fix without reproducing the bug yourself
+- Jumping to `cdp_reload` without identifying the root cause ("reload and see")
+- Adding `try/catch` to silence an error instead of understanding it
+- Claiming "fixed" without running the exact reproduction steps again
+- Using `xcrun simctl` or `adb logcat` directly when `collect_logs` is the supported path
+- Gathering evidence serially instead of in parallel (component tree + logs + network + store)
+- Proposing multiple fixes at once — narrow to the single root cause first
+- Calling `cdp_component_tree()` without a filter — drowns signal in noise
+
+## Verification — Fix Complete When
+
+- [ ] Root cause identified and stated (not just symptom)
+- [ ] Reproduction steps executed AGAIN after the fix → bug does NOT reproduce
+- [ ] `cdp_error_log(clear: true)` → run feature → `cdp_error_log()` returns 0 new errors
+- [ ] `device_screenshot` captures the post-fix state
+- [ ] `cdp_store_state(path="<affected>")` shows expected shape (if state-related)
+- [ ] No adjacent files refactored ("while I'm here") — scope discipline

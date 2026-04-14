@@ -131,3 +131,36 @@ development until all critical checks pass.
 
 Once all checks pass, tell the user:
 "Environment is ready. You can now use `/rn-dev-agent:rn-feature-dev` to implement features."
+
+---
+
+## Common Rationalizations
+
+Setup is boring — agents skip it and pay for it later.
+
+| Excuse | Reality |
+|--------|---------|
+| "Node v25 should work fine, it's newer than v22" | Odd-numbered Node releases (v23, v25) are NOT LTS. `ws`, `better-sqlite3`, and other native modules the plugin depends on may fail silently. Use v22 LTS. |
+| "The SessionStart banner says 'WARNING: agent-device not installed' — it'll auto-install next time" | Auto-install already ran and FAILED. That's why there's a warning. Run the ensure script NOW and read the actual error. |
+| "I'll skip the Metro check — I'll start it later when I need it" | Without Metro, `cdp_status` fails, Phase 5.5 fails, and the whole pipeline stops. Start Metro FIRST. |
+| "The user can install agent-device themselves" | They ran `/rn-dev-agent:setup` expecting guidance. Give them the exact command with the flag they need (sudo? nvm? permission fix?). |
+| "I'll proceed with the feature — setup can be done in parallel" | No. Feature development depends on all 9 checks passing. Get the environment green first, then proceed. |
+
+## Red Flags — Stop and Reconsider
+
+- Attempting to run a `cdp_*` tool when `cdp_status` returns `connected: false`
+- Proceeding with feature dev when setup shows any RED row
+- Suggesting `sudo npm install -g` without first checking if nvm is available
+- Ignoring "WARNING: not installed" from the SessionStart banner
+- Claiming "setup passed" without showing the 9-row table with evidence
+
+## Verification — Setup Complete When
+
+- [ ] Node.js is an even-numbered version >= 22 (v22, v24, NOT v23, v25)
+- [ ] `cd scripts/cdp-bridge && npm ls --depth=0` shows no WARN/ERR
+- [ ] `agent-device --version` prints a version number
+- [ ] `~/.maestro-runner/bin/maestro-runner --version` works (or `command -v maestro-runner`)
+- [ ] At least ONE of: iOS simulator booted OR Android emulator running
+- [ ] `curl -s http://127.0.0.1:8081/status` returns `packager-status:running`
+- [ ] `cdp_status` returns `ok:true` with `cdp.connected: true`
+- [ ] Present the 9-row results table to the user — no hidden failures

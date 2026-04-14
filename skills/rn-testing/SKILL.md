@@ -443,3 +443,40 @@ cdp_store_state(path="auth")           # reads full useAuthStore.getState()
 | Xcode + Simulator | iOS | iOS testing | Mac App Store |
 | Android SDK + adb | Android | Android testing | developer.android.com |
 | Node.js >= 18 | Required | CDP MCP server | nodejs.org |
+
+---
+
+## Common Rationalizations
+
+Agents routinely skip test steps because "it looks right." Don't.
+
+| Excuse | Reality |
+|--------|---------|
+| "I tested on iOS, Android behaves the same" | False for ~40% of features (Ralph Loop data). Keyboard, permissions, back button, text input quirks, safe-area differ. Run `cross_platform_verify` unless explicitly single-platform. |
+| "The component renders, I don't need to check state" | Rendering with wrong state is how most production bugs ship. `cdp_store_state(path="X")` is one call — take it. |
+| "A screenshot is enough proof" | Screenshots show pixels, not correctness. If the test is "add to cart increments badge", verify the STORE incremented (`cdp_store_state`) — screenshot alone may show stale render. |
+| "Manual testing is faster than writing a Maestro flow" | Manual doesn't persist. Tomorrow's refactor breaks the feature silently. A 15-second Maestro flow saves hours of regression debugging. |
+| "I'll skip the `assertVisible` step — CDP is fast enough" | React render is async. `cdp_component_tree` called 50ms after a tap may query the old tree. Always `assertVisible` first, then CDP. |
+| "The feature is trivial, no need for a testID" | Every interactive element needs a testID. Without them, E2E tests rely on text matching which breaks on i18n, capitalization, and whitespace changes. |
+| "Network mocking is overkill for this test" | Real API calls make tests flaky (rate limits, network, staging drift). Mock at the boundary (MSW or `__RN_AGENT_RESPONSE_BODIES__`). |
+
+## Red Flags — Stop and Reconsider
+
+- About to claim "tested" without having called `cdp_status` first
+- Reading ONLY `cdp_component_tree` without also checking store state
+- Skipping cross-platform check because "I'm in a rush"
+- Writing assertions on pixel positions or exact colors (brittle)
+- Adding `sleep 3` to fix flakiness instead of using `assertVisible`
+- Testing happy path only — no empty state, no error state, no loading state
+
+## Verification — Before Declaring Tests Complete
+
+- [ ] `cdp_status` returns `ok:true` with `cdp.connected: true`
+- [ ] testIDs added to every new interactive element
+- [ ] Maestro flow runs green: `maestro_run` on iOS
+- [ ] Maestro flow runs green: `maestro_run` on Android (unless explicitly skipped)
+- [ ] `cdp_store_state` confirms expected state after interactions
+- [ ] `cdp_component_tree` shows the expected rendered tree
+- [ ] `cdp_error_log` returns zero errors at the end of the flow
+- [ ] Screenshots saved to `docs/proof/<feature>/` for PR evidence
+- [ ] Cross-platform parity verified OR documented difference noted

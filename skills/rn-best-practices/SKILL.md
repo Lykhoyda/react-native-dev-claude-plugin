@@ -159,3 +159,28 @@ read `references/list-performance-virtualize.md` and `references/list-performanc
 | 12 | Third-Party Deps | 1 | direct imports from node_modules |
 | 13 | JavaScript | 1 | Intl formatters in render |
 | 14 | Fonts | 1 | useFonts, Font.loadAsync |
+
+---
+
+## Common Rationalizations
+
+During architecture design and code review, agents routinely dismiss best-practice rules as "premature."
+
+| Excuse | Reality |
+|--------|---------|
+| "It's just a 10-item list, I don't need FlashList" | Apps grow. Today's 10 items become tomorrow's 1000. Use FlashList from the start — cost is near-zero, upgrade later is painful. |
+| "Inline arrow functions in renderItem are fine for this case" | They cause every item to re-render on every parent render. Use `useCallback` — it's one extra line. |
+| "The && pattern is clear enough here" | `items.length && <Content/>` renders "0" when items is []. Always use ternary or `!!`: `items.length > 0 ? <Content/> : null`. This is a crash vector. |
+| "I'll handle SafeAreaView later" | Later never comes. Every screen needs safe-area handling from day one — it's not cosmetic, it affects hit targets. |
+| "The user asked for a simple feature — skip the rule review" | Simple features ship. Bad patterns become codebase conventions. Review against the rules at Phase 4 (Architecture) AND Phase 6 (Review). |
+| "I'll use `Touchable*` everywhere — it's familiar" | `Touchable*` is deprecated. Use `Pressable` — it has built-in pressed/hovered states and is the supported API. |
+| "I need to migrate the whole codebase to follow rule X" | Scope discipline. Apply rules to NEW code and code you're already touching. Don't refactor adjacent files. |
+
+## Red Flags — Stop and Reconsider
+
+- About to approve code with `&&` falsy-value patterns
+- About to approve a list component that isn't `FlashList` or `FlatList` with proper memoization
+- About to approve inline objects or functions inside `renderItem`
+- About to approve a screen without `SafeAreaView` or `edges` prop
+- About to approve `Touchable*` in new code (should be `Pressable`)
+- About to approve `Intl.DateTimeFormat` called inside render (hoist to module level)

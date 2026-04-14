@@ -595,3 +595,64 @@ this is a bug — fix it before completing.
 - **Debugger paused**: Call `cdp_reload(full=true)` to resume.
 - **Another debugger connected (code 1006)**: Ask user to close React Native
   DevTools, Flipper, or Chrome DevTools.
+
+---
+
+## Common Rationalizations
+
+Each phase has shortcuts agents reach for. Don't.
+
+| Excuse | Reality |
+|--------|---------|
+| "I read the explorer's report — skip reading the actual files" | Explorer reports are summaries. Read 2-3 key files the explorer flagged before designing. |
+| "The blueprint is detailed enough — implement directly, skip questions" | Phase 3 (Questions) catches the 5 assumptions that would waste 2 hours of rework. Ask them. |
+| "Phase 5.5 verification is slow — skip it and trust the review" | Code review ≠ runtime verification. A component can look correct and render wrong. `cdp_component_tree` + `cdp_store_state` takes 10 seconds. |
+| "I tested iOS — Android works the same" | Wrong ~40% of the time. Keyboard, permissions, back button, text input, safe-area all differ. `cross_platform_verify` is mandatory unless explicitly single-platform. |
+| "Phase 6 found 1 issue — ship it" | Review agents already filter by confidence. If ONE flags an issue, read it fully. |
+| "Phase 8 (E2E Proof) is just for PR theater" | Proof flows become the permanent Maestro test file. Skip them and you pay in manual testing every sprint. |
+
+## Red Flags — Stop and Reconsider
+
+- About to enter Phase 5 without user approval on the architecture
+- About to mark Phase 5.5 complete with a PASS row that has empty Evidence
+- About to commit without running `cdp_error_log` to confirm zero new errors
+- About to skip a phase "because the feature is small"
+- About to add a dependency without asking the user first
+- Editing files outside the architect's blueprint "while I'm here"
+
+## Boundaries
+
+### Always
+- Call `cdp_status` before Phase 5.5 starts
+- Run the architect's proof flow step-by-step in Phase 8
+- Use MCP tools (cdp_*, device_*) for app state reads
+- Present the Phase 5.5 verification table with concrete Evidence
+- Gate Phase 5 on user approval of the architecture
+
+### Ask First
+- Adding any new dependency to the user's project
+- Changing navigation structure (route names, param types)
+- Modifying existing store shape
+- Creating more than 5 files for a single feature
+- Disabling an existing test
+
+### Never
+- Claim "done" without a Phase 5.5 table with Evidence in every row
+- Use `xcrun simctl` or `adb` for app interaction (use MCP tools)
+- Refactor adjacent components ("while I'm here")
+- Add `console.log` calls and leave them in committed code
+- Proceed past Phase 4 without user approval on architecture
+- Commit with `cdp_error_log` showing new errors
+
+## Verification — Feature Complete When
+
+- [ ] Phase 5.5 verification table has concrete Evidence in every row (no blanks, no "seems fine")
+- [ ] `cdp_status` returns `ok:true` at end of Phase 5.5 and Phase 8
+- [ ] `cdp_error_log` shows 0 new errors at end of Phase 8
+- [ ] At least 3 numbered screenshots saved to `docs/proof/<feature>/`
+- [ ] `PROOF.md` written with the architect's steps and actual results
+- [ ] Phase 6 review agents all reported (or "no high-confidence issues")
+- [ ] `cross_platform_verify` run OR single-platform noted in Phase 7 summary
+- [ ] Phase 7 summary lists: files modified, decisions logged, verification results
+- [ ] No adjacent files modified outside the architect's blueprint
+- [ ] `cd scripts/cdp-bridge && npm test` passes (if plugin code changed)

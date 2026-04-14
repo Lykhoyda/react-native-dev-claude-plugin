@@ -175,6 +175,41 @@ binary name discovery), see the **rn-device-control** skill.
 
 ---
 
+## Common Rationalizations
+
+Agents routinely skip diagnostic steps because "the problem looks obvious." Don't.
+
+| Excuse | Reality |
+|--------|---------|
+| "The error message is clear — I'll just fix what it says" | Error messages are symptoms. A "Cannot read property 'x' of undefined" may mean a store slice isn't hydrated, a race condition in a selector, or a stale cache. Read `cdp_store_state` and `cdp_error_log` together before editing code. |
+| "Native crashes look rare — skip `collect_logs(sources=['native_ios'])`" | Blank screens, unresponsive apps, and reload loops are often native crashes that show nothing in JS. If the screen is empty and `cdp_error_log` is empty, native is where the truth lives. |
+| "CDP is flaky, I'll work around it with `xcrun simctl`" | `xcrun simctl` bypasses the app state — you fix the wrong layer. If CDP is unstable, debug CDP (`cdp_status`, check Metro, check target). Don't route around it. |
+| "I know what's wrong, skip the component tree" | `cdp_component_tree(filter="X")` is ~300ms. Confirming the rendered fiber state takes less time than one wrong guess. Always verify your mental model before editing. |
+| "The fix is small, I don't need to reproduce first" | Without a before-state, you can't prove the fix actually works. Reproduce → fix → reproduce-again is the only trustworthy loop. |
+| "Reloading will make the problem go away" | Reload is a lazy workaround, not a fix. If the bug re-appears after navigation or state changes, you haven't fixed it. Find the root cause. |
+
+## Red Flags — Stop and Reconsider
+
+If you notice yourself doing any of these, stop and reassess:
+
+- Editing code without having read `cdp_error_log` + `cdp_component_tree` first
+- About to run `xcrun simctl` or `adb logcat` directly instead of `collect_logs`
+- Claiming "fixed" without running the reproduction steps again
+- Declaring "looks fine now" based on a screenshot alone — check store state too
+- Suggesting a reload without having identified the actual bug
+- Adding `try/catch` to silence the error instead of understanding it
+
+## Verification — Before Declaring a Fix Complete
+
+- [ ] `cdp_status` returns `ok:true` with no errors
+- [ ] Reproduction steps executed AGAIN after the fix → bug no longer reproduces
+- [ ] `cdp_error_log(clear: true)` → `cdp_error_log()` shows zero new errors
+- [ ] If the bug showed symptoms on screen, `device_screenshot` now shows expected state
+- [ ] If the bug was state-related, `cdp_store_state(path="<slice>")` returns expected shape
+- [ ] Cross-platform: check the same flow on the OTHER platform (`cross_platform_verify`)
+
+---
+
 ## Additional Resources
 
 - **`references/common-error-patterns.md`** — Diagnostic recipes for common RN errors

@@ -138,3 +138,32 @@ Group findings by severity:
 
 If no high-confidence issues found, confirm the code meets standards
 with a brief summary of what you checked.
+
+---
+
+## Red Flags — Stop and Reconsider
+
+If you notice yourself doing any of these, stop:
+
+- Reporting issues below 80% confidence — noise drowns signal
+- Reporting style/preference nits — only behavior-affecting issues
+- Flagging an issue without a file path and line number
+- Flagging an issue without a concrete fix suggestion
+- Ignoring the best-practice rules from `rn-best-practices` skill
+- Reviewing files outside the changed scope (caller specifies the range)
+- Suggesting refactors unrelated to the change being reviewed
+
+## Scope Discipline
+
+- Review ONLY the files in the specified diff/scope
+- Do NOT suggest "while you're here" improvements to unchanged code
+- Do NOT propose architectural changes — that's the architect's role
+- Flag Critical (>=90%) and Important (>=80%) issues only — skip nits
+
+## Verification — Review Complete When
+
+- [ ] Every flagged issue has: file path, line number, confidence score, fix suggestion
+- [ ] Checked against `rn-best-practices` rules (falsy-&&, inline objects, Touchable*, etc.)
+- [ ] Checked for testID presence on new interactive elements
+- [ ] Checked for null/undefined safety on store selectors
+- [ ] No issues flagged outside the specified review scope

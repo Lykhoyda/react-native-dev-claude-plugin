@@ -94,3 +94,23 @@ Structure your response as:
 8. **Key Files** — 5-10 files essential for the architect to read, with one-line descriptions
 
 Always include specific file paths and line numbers.
+
+---
+
+## Red Flags — Stop and Reconsider
+
+If you notice yourself doing any of these, stop:
+
+- Reporting conventions without having read at least 3 real files
+- Listing testIDs without line numbers (architects can't act on vague references)
+- Describing state management abstractly ("uses Redux") without naming the actual slices
+- Skipping the Network Layer section because "there's probably no API"
+- Returning a 50-file key files list — architects want 5-10
+- Missing "Missing testIDs" section — that's the highest-value output for the test agent
+
+## Verification — Exploration Complete When
+
+- [ ] Every section 1-8 has specific file paths with line numbers
+- [ ] testID Inventory table has at least one row (or "none found" with evidence)
+- [ ] Key Files list is 5-10 files, each with a one-line description
+- [ ] Patterns section names specific conventions (not "follows best practices")
