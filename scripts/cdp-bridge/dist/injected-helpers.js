@@ -272,14 +272,31 @@ export const INJECTED_HELPERS = `
 
     var root = renderer.roots.values().next().value;
 
+    function isNavLike(obj) {
+      return obj && Array.isArray(obj.routes) && typeof obj.index === 'number';
+    }
+
+    function findNavInHooks(memoizedState) {
+      var hook = memoizedState;
+      var depth = 0;
+      while (hook && depth < 30) {
+        if (hook.memoizedState && isNavLike(hook.memoizedState)) return hook.memoizedState;
+        if (isNavLike(hook)) return hook;
+        if (hook.queue && hook.queue.lastRenderedState && isNavLike(hook.queue.lastRenderedState)) return hook.queue.lastRenderedState;
+        hook = hook.next;
+        depth++;
+      }
+      return null;
+    }
+
     function findNav(fiber, depth) {
       var current = fiber;
       while (current) {
         if ((depth || 0) > 30) return null;
         var name = current.type && (current.type.displayName || current.type.name);
         if (name === 'NavigationContainer' || name === 'ExpoRoot') {
-          var s = current.memoizedState && current.memoizedState.memoizedState;
-          if (s && s[0]) return s[0];
+          var found = findNavInHooks(current.memoizedState);
+          if (found) return found;
         }
         var found = findNav(current.child, (depth || 0) + 1);
         if (found) return found;
