@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import WebSocket from 'ws';
 import { RingBuffer } from './ring-buffer.js';
 import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from './injected-helpers.js';
@@ -9,6 +8,7 @@ import type { CDPResettableState } from './cdp/state.js';
 import { CDP_TIMEOUT_FAST, CDP_TIMEOUT_MS, CDP_TIMEOUT_SLOW, timeoutForMethod } from './cdp/timeout-config.js';
 import { sendWithTimeout as sendMsg, rejectAllPending as rejectPending, handleMessage as handleMsg } from './cdp/transport.js';
 import { wireEventHandlers, parseNetworkHookMessage as parseNetHook } from './cdp/event-handlers.js';
+import { discover, discoverForList } from './cdp/discovery.js';
 import type {
   PendingCall,
   HermesTarget,
@@ -23,12 +23,6 @@ const REACT_READY_POLL_MS = 500;
 const RECONNECT_DELAY_MS = 1500;
 const RECONNECT_ATTEMPTS = 30;
 const RECONNECT_RETRY_MS = 1500;
-const DISCOVERY_TIMEOUT_MS = 1500;
-const USER_METRO_PORT = process.env.RN_METRO_PORT ? parseInt(process.env.RN_METRO_PORT, 10) : null;
-const DEFAULT_PORTS = [
-  ...(USER_METRO_PORT && !isNaN(USER_METRO_PORT) ? [USER_METRO_PORT] : []),
-  8081, 8082, 19000, 19006,
-];
 
 export class CDPClient {
   private ws: WebSocket | null = null;
@@ -135,81 +129,8 @@ export class CDPClient {
     return this.discoverAndConnect(portHint, effectivePlatform);
   }
 
-  private inferPlatforms(targets: HermesTarget[]): void {
-    let androidPackages: Set<string> | null = null;
-    try {
-      const out = execFileSync('adb', ['shell', 'pm', 'list', 'packages'], {
-        timeout: 3000,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      androidPackages = new Set(
-        out.split('\n')
-          .map(line => line.replace('package:', '').trim())
-          .filter(Boolean),
-      );
-    } catch {
-      // adb not available or no device — all targets treated as iOS
-    }
-
-    for (const t of targets) {
-      if (androidPackages?.has(t.description ?? '')) {
-        t.platform = 'android';
-      } else {
-        t.platform = 'ios';
-      }
-    }
-  }
-
   async listTargets(portHint?: number): Promise<{ port: number; targets: HermesTarget[] }> {
-    const ports = [...new Set([portHint ?? this._port, ...DEFAULT_PORTS])];
-    let metroPort: number | null = null;
-
-    for (const p of ports) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), DISCOVERY_TIMEOUT_MS);
-      try {
-        const resp = await fetch(`http://127.0.0.1:${p}/status`, { signal: ctrl.signal });
-        const text = await resp.text();
-        if (text.includes('packager-status:running')) {
-          metroPort = p;
-          break;
-        }
-      } catch {
-        // Port not available
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    if (!metroPort) {
-      throw new Error('Metro not found on ports ' + ports.join(', '));
-    }
-
-    const listCtrl = new AbortController();
-    const listTimer = setTimeout(() => listCtrl.abort(), DISCOVERY_TIMEOUT_MS * 2);
-    let raw: HermesTarget[];
-    try {
-      const resp = await fetch(`http://127.0.0.1:${metroPort}/json/list`, { signal: listCtrl.signal });
-      raw = (await resp.json()) as HermesTarget[];
-    } catch (err) {
-      throw new Error(`Failed to list CDP targets on port ${metroPort}: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      clearTimeout(listTimer);
-    }
-
-    const targets = raw
-      .filter(t => !!t.webSocketDebuggerUrl && !t.title?.includes('Experimental') &&
-        (t.vm === 'Hermes' || t.title?.includes('React Native') || t.description?.includes('React Native')))
-      .map(t => ({
-        ...t,
-        webSocketDebuggerUrl: t.webSocketDebuggerUrl
-          ?.replace(/\[::1\]/g, '127.0.0.1')
-          ?.replace(/\[::\]/g, '127.0.0.1'),
-      }));
-
-    this.inferPlatforms(targets);
-    return { port: metroPort, targets };
+    return discoverForList(this._port, portHint);
   }
 
   private _platformFilter?: string;
@@ -223,121 +144,26 @@ export class CDPClient {
     if (platformFilter !== undefined) this._platformFilter = platformFilter || undefined;
     this._state = 'connecting';
 
-    const ports = [...new Set([this._port, ...DEFAULT_PORTS])];
-    logger.debug('CDP', `Discovering Metro on ports: ${ports.join(', ')}${this._platformFilter ? ` (platform: ${this._platformFilter})` : ''}`);
-    let metroPort: number | null = null;
-
-    for (const p of ports) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), DISCOVERY_TIMEOUT_MS);
-      try {
-        const resp = await fetch(`http://127.0.0.1:${p}/status`, { signal: ctrl.signal });
-        const text = await resp.text();
-        if (text.includes('packager-status:running')) {
-          metroPort = p;
-          break;
-        }
-      } catch {
-        // Port not available, continue scanning
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    if (!metroPort) {
-      this._state = 'disconnected';
-      throw new Error(
-        'Metro not found on ports ' + ports.join(', ') +
-        '. Is the dev server running? Try: npx expo start or npx react-native start'
-      );
-    }
-    this._port = metroPort;
-    logger.info('CDP', `Metro found on port ${metroPort}`);
-
-    const listCtrl = new AbortController();
-    const listTimer = setTimeout(() => listCtrl.abort(), DISCOVERY_TIMEOUT_MS * 2);
-    let targets: HermesTarget[];
+    let result;
     try {
-      const targetsResp = await fetch(`http://127.0.0.1:${metroPort}/json/list`, { signal: listCtrl.signal });
-      targets = (await targetsResp.json()) as HermesTarget[];
+      result = await discover(this._port, this._platformFilter);
     } catch (err) {
       this._state = 'disconnected';
-      throw new Error(`Failed to list CDP targets on port ${metroPort}: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      clearTimeout(listTimer);
+      throw err;
     }
 
-    const validTargets = targets
-      .filter(t => !!t.webSocketDebuggerUrl && !t.title?.includes('Experimental') &&
-        (t.vm === 'Hermes' || t.title?.includes('React Native') || t.description?.includes('React Native')))
-      .map(t => ({
-        ...t,
-        webSocketDebuggerUrl: t.webSocketDebuggerUrl
-          ?.replace(/\[::1\]/g, '127.0.0.1')
-          ?.replace(/\[::\]/g, '127.0.0.1'),
-      }))
-      .filter(t => {
-        try {
-          const { hostname } = new URL(t.webSocketDebuggerUrl!);
-          return hostname === '127.0.0.1' || hostname === 'localhost';
-        } catch {
-          return false;
-        }
-      });
+    const { port: metroPort, targets: sorted, warning: platformFilterWarning } = result;
+    this._port = metroPort;
 
-    if (validTargets.length === 0) {
-      this._state = 'disconnected';
-      throw new Error(
-        'No Hermes debug target found. Is the app running? Is Hermes enabled?'
-      );
-    }
-
-    // Infer platform per target via adb package list
-    this.inferPlatforms(validTargets);
-
-    // Filter by platform if specified
-    let filteredTargets = validTargets;
-    let platformFilterWarning: string | undefined;
-    if (this._platformFilter) {
-      const pf = this._platformFilter.toLowerCase();
-      // Primary: match on inferred platform field
-      let platformMatched = validTargets.filter(t => t.platform === pf);
-      // Fallback: text search on title + description + vm
-      if (platformMatched.length === 0) {
-        platformMatched = validTargets.filter(t => {
-          const haystack = `${t.title ?? ''} ${t.description ?? ''} ${t.vm ?? ''}`.toLowerCase();
-          return haystack.includes(pf);
-        });
-      }
-      if (platformMatched.length > 0) {
-        filteredTargets = platformMatched;
-      } else {
-        platformFilterWarning = `Platform filter "${this._platformFilter}" matched no targets (available: ${validTargets.map(t => `${t.description || t.id} [${t.platform ?? '?'}]`).join(', ')}). Connecting to best available target.`;
-        console.error('CDP: ' + platformFilterWarning);
-      }
-    }
-
-    logger.debug('CDP', `Found ${filteredTargets.length} valid target(s): ${filteredTargets.map(t => `${t.id} (${t.title}, platform=${t.platform ?? '?'})`).join(', ')}`);
-
-    // Sort by descending page ID (highest = most recent session)
-    const sorted = [...filteredTargets].sort((a, b) => {
-      const aPage = parseInt(a.id?.split('-')[1] ?? '0', 10);
-      const bPage = parseInt(b.id?.split('-')[1] ?? '0', 10);
-      return bPage - aPage;
-    });
-
-    // Try each target, verify __DEV__ is true (correct app JS context)
     let connectedTarget: HermesTarget | null = null;
     for (const candidate of sorted) {
       try {
         await this.connectToTarget(candidate);
-        // Probe __DEV__ to verify we're in the app's main JS context
         const devCheck = await this.evaluate('typeof __DEV__ !== "undefined" && __DEV__ === true');
         if (devCheck.value === true) {
           connectedTarget = candidate;
           break;
         }
-        // Wrong context — disconnect and try next target
         console.error(`CDP: target ${candidate.id} (${candidate.title}) has __DEV__=${devCheck.value}, skipping`);
         if (sorted.indexOf(candidate) < sorted.length - 1) {
           if (this.ws) {
@@ -350,11 +176,9 @@ export class CDPClient {
           this._connectedTarget = null;
           continue;
         }
-        // Last target — use it anyway with a warning
         console.error('CDP: no target with __DEV__=true found, using last available target');
         connectedTarget = candidate;
       } catch (err) {
-        // Connection failed — try next target if available
         if (sorted.indexOf(candidate) < sorted.length - 1) continue;
         throw err;
       }
