@@ -252,10 +252,10 @@ trackedTool(
 
 trackedTool(
   'cdp_store_state',
-  'Read app store state (Redux, Zustand, React Query). Use path to query specific slice (e.g. "cart.items", "auth.user.name"). Use storeType to target a specific store when multiple exist. Redux auto-detected via fiber Provider. Zustand requires: if (__DEV__) global.__ZUSTAND_STORES__ = { store }',
+  'Read app store state (Redux, Zustand, Jotai, React Query). Use path to query specific slice (e.g. "cart.items", "auth.user.name"). Use storeType to target a specific store when multiple exist. Redux auto-detected via fiber Provider. Zustand requires: if (__DEV__) global.__ZUSTAND_STORES__ = { store }. Jotai requires: if (__DEV__) { global.__JOTAI_STORE__ = store; global.__JOTAI_ATOMS__ = { name: atom } }',
   {
     path: z.string().optional().describe('Dot-path into store state (e.g. "cart.items")'),
-    storeType: z.enum(['redux', 'zustand', 'react-query']).optional().describe('Target a specific store type. Useful when app has both Redux and React Query.'),
+    storeType: z.enum(['redux', 'zustand', 'jotai', 'react-query']).optional().describe('Target a specific store type. Useful when app has both Redux and React Query.'),
   },
   createStoreStateHandler(getClient),
 );

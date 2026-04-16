@@ -125,9 +125,9 @@ trackedTool('cdp_console_log', 'Get recent console output. Buffered in ring buff
     limit: z.number().int().min(1).max(200).default(50).describe('Max entries to return (default 50, max 200)'),
     clear: z.boolean().default(false).describe('Clear console buffer instead of reading'),
 }, createConsoleLogHandler(getClient));
-trackedTool('cdp_store_state', 'Read app store state (Redux, Zustand, React Query). Use path to query specific slice (e.g. "cart.items", "auth.user.name"). Use storeType to target a specific store when multiple exist. Redux auto-detected via fiber Provider. Zustand requires: if (__DEV__) global.__ZUSTAND_STORES__ = { store }', {
+trackedTool('cdp_store_state', 'Read app store state (Redux, Zustand, Jotai, React Query). Use path to query specific slice (e.g. "cart.items", "auth.user.name"). Use storeType to target a specific store when multiple exist. Redux auto-detected via fiber Provider. Zustand requires: if (__DEV__) global.__ZUSTAND_STORES__ = { store }. Jotai requires: if (__DEV__) { global.__JOTAI_STORE__ = store; global.__JOTAI_ATOMS__ = { name: atom } }', {
     path: z.string().optional().describe('Dot-path into store state (e.g. "cart.items")'),
-    storeType: z.enum(['redux', 'zustand', 'react-query']).optional().describe('Target a specific store type. Useful when app has both Redux and React Query.'),
+    storeType: z.enum(['redux', 'zustand', 'jotai', 'react-query']).optional().describe('Target a specific store type. Useful when app has both Redux and React Query.'),
 }, createStoreStateHandler(getClient));
 trackedTool('cdp_navigate', 'Navigate to any screen by name, including nested stack screens that __NAV_REF__.navigate() cannot reach. Builds a nested dispatch action by walking the navigation state tree. Works across tabs, stacks, and modals.', {
     screen: z.string().describe('Screen name to navigate to (e.g. "AllTasks", "Dashboard", "ProfileEditModal")'),

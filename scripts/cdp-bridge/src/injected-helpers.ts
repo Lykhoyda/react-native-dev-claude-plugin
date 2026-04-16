@@ -632,6 +632,21 @@ export const INJECTED_HELPERS = `
         storeType = 'zustand';
       }
     }
+    if (!state && (!requestedType || requestedType === 'jotai')) {
+      if (globalThis.__JOTAI_STORE__ && globalThis.__JOTAI_ATOMS__) {
+        var jStore = globalThis.__JOTAI_STORE__;
+        var jAtoms = globalThis.__JOTAI_ATOMS__;
+        if (typeof jStore.get === 'function') {
+          var result = {};
+          var keys = Object.keys(jAtoms);
+          for (var i = 0; i < keys.length; i++) {
+            try { result[keys[i]] = jStore.get(jAtoms[keys[i]]); } catch(e) { result[keys[i]] = '<<error: ' + (e && e.message || String(e)) + '>>'; }
+          }
+          state = result;
+          storeType = 'jotai';
+        }
+      }
+    }
 
     if (!state) {
       var storeRenderer = findActiveRenderer();
@@ -674,7 +689,8 @@ export const INJECTED_HELPERS = `
       return JSON.stringify({
         __agent_error: 'No store found.',
         hint: 'For Zustand, add to app entry: if (__DEV__) global.__ZUSTAND_STORES__ = { myStore }',
-        hint2: 'For Redux, the Provider is auto-detected. Check it is mounted.'
+        hint2: 'For Redux, the Provider is auto-detected. Check it is mounted.',
+        hint3: 'For Jotai, add: if (__DEV__) { global.__JOTAI_STORE__ = store; global.__JOTAI_ATOMS__ = { count: countAtom } }'
       });
     }
 

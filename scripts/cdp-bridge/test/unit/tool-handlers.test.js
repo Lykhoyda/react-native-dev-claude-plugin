@@ -244,6 +244,19 @@ test('store_state: returns { raw } for unparseable string', async () => {
   assert.deepEqual(data, { raw: 'not-json' });
 });
 
+test('store_state: passes storeType jotai to expression', async () => {
+  let capturedExpr;
+  const client = createMockClient({
+    evaluate: async (expr) => {
+      capturedExpr = expr;
+      return { value: JSON.stringify({ type: 'jotai', state: { count: 0 } }) };
+    },
+  });
+  const handler = createStoreStateHandler(() => client);
+  await handler({ storeType: 'jotai' });
+  assert.match(capturedExpr, /getStoreState\(undefined,\s*"jotai"\)/);
+});
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // cdp_navigation_state
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
