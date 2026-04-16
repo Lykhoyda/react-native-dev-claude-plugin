@@ -439,12 +439,13 @@ trackedTool(
 
 trackedTool(
   'device_screenshot',
-  'Capture a screenshot of the active device screen. Returns image data or file path. Prefer JPEG for faster capture.',
+  'Capture a screenshot of the active device screen. Returns image data or file path. Prefer JPEG for faster capture. When both iOS sim and Android emulator are booted, defaults to the platform of the currently connected CDP target; override with `platform` if needed.',
   {
     path: z.string().optional().describe('Output file path (default: auto-generated in /tmp). Use .jpg extension for JPEG.'),
     format: z.enum(['jpeg', 'png']).optional().describe('Image format (default: auto-detect from path extension, or jpeg)'),
+    platform: z.enum(['ios', 'android']).optional().describe('Target device platform. Defaults to the currently-connected CDP target platform.'),
   },
-  createDeviceScreenshotHandler(),
+  createDeviceScreenshotHandler(getClient),
 );
 
 trackedTool(

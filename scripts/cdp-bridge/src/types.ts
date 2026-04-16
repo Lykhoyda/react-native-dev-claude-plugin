@@ -20,6 +20,12 @@ export interface HermesTarget {
   description?: string;
   type?: string;
   platform?: 'ios' | 'android';
+  /**
+   * B116 (D639): set true when the bundleId is installed on BOTH iOS sim AND
+   * Android emulator and neither inference source could disambiguate. Callers
+   * should pass `targetId` or `bundleId + platform` for exact selection.
+   */
+  ambiguousPlatform?: boolean;
 }
 
 export interface ConsoleEntry {

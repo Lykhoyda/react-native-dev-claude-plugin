@@ -53,27 +53,92 @@ export function filterValidTargets(targets: HermesTarget[]): HermesTarget[] {
     }));
 }
 
-export function inferPlatforms(targets: HermesTarget[]): void {
-  let androidPackages: Set<string> | null = null;
+/**
+ * B116 (D639): extract top-level bundle IDs from `xcrun simctl listapps booted`.
+ * Output is NeXTSTEP plist; top-level keys are quoted bundle IDs at exactly
+ * 4-space indentation, e.g. `    "com.foo.bar" = {`. We match that pattern
+ * explicitly so we don't pick up nested keys like GroupContainers entries.
+ */
+export function parseSimctlListapps(stdout: string): Set<string> {
+  const ids = new Set<string>();
+  const TOP_LEVEL = /^    "([A-Za-z0-9._-]+)"\s*=\s*\{/;
+  for (const line of stdout.split('\n')) {
+    const m = line.match(TOP_LEVEL);
+    if (m) ids.add(m[1]);
+  }
+  return ids;
+}
+
+function readAndroidPackages(): Set<string> | null {
   try {
     const out = execFileSync('adb', ['shell', 'pm', 'list', 'packages'], {
       timeout: 3000,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    androidPackages = new Set(
+    return new Set(
       out.split('\n')
         .map(line => line.replace('package:', '').trim())
         .filter(Boolean),
     );
   } catch {
-    // adb not available or no device — all targets treated as iOS
+    return null;
   }
+}
+
+function readIOSPackages(): Set<string> | null {
+  try {
+    const out = execFileSync('xcrun', ['simctl', 'listapps', 'booted'], {
+      timeout: 5000,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return parseSimctlListapps(out);
+  } catch {
+    return null;
+  }
+}
+
+export interface PlatformInferenceReaders {
+  readAndroid?: () => Set<string> | null;
+  readIOS?: () => Set<string> | null;
+}
+
+/**
+ * B116 (D639): look up each target's description against BOTH iOS simctl and
+ * Android adb installed-package sets. If present in only one, tag that
+ * platform. If present in both (same bundleId installed on both devices),
+ * we can't disambiguate from bundleId alone — leave the target ambiguous
+ * (callers must pass `targetId` or `bundleId` + `platform`).
+ * If present in neither (or lookup failed), fall back to iOS (matches prior
+ * behavior — iOS-first bias).
+ *
+ * Readers are injectable for unit testing without spawning subprocesses.
+ */
+export function inferPlatforms(
+  targets: HermesTarget[],
+  readers: PlatformInferenceReaders = {},
+): void {
+  const androidPackages = (readers.readAndroid ?? readAndroidPackages)();
+  const iosPackages = (readers.readIOS ?? readIOSPackages)();
 
   for (const t of targets) {
-    if (androidPackages?.has(t.description ?? '')) {
+    const desc = t.description ?? '';
+    const inAndroid = androidPackages?.has(desc) ?? false;
+    const inIOS = iosPackages?.has(desc) ?? false;
+
+    if (inAndroid && !inIOS) {
       t.platform = 'android';
+    } else if (inIOS && !inAndroid) {
+      t.platform = 'ios';
+    } else if (inAndroid && inIOS) {
+      // Ambiguous — same bundleId installed on both. Default to iOS but mark
+      // for downstream so callers can notice and pass targetId/bundleId filter.
+      t.platform = 'ios';
+      t.ambiguousPlatform = true;
     } else {
+      // No information (adb/simctl both failed, or target bundle unknown) —
+      // default to iOS to preserve prior behavior for iOS-only setups.
       t.platform = 'ios';
     }
   }

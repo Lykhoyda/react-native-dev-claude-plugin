@@ -5,7 +5,8 @@ import { logger } from './logger.js';
 import { performSetup, reinjectHelpers as reinjectHelpersFn } from './cdp/setup.js';
 import { resetState, setActiveFlag, clearActiveFlag, sleep } from './cdp/state.js';
 import type { ResettableState } from './cdp/state.js';
-import { CDP_TIMEOUT_MS, timeoutForMethod } from './cdp/timeout-config.js';
+import { defaultTimeout, timeoutForMethod } from './cdp/timeout-config.js';
+import type { Platform } from './cdp/timeout-config.js';
 import { sendWithTimeout as sendMsg, rejectAllPending as rejectPending, handleMessage as handleMsg } from './cdp/transport.js';
 import { wireEventHandlers, parseNetworkHookMessage as parseNetHook } from './cdp/event-handlers.js';
 import { discover, discoverForList } from './cdp/discovery.js';
@@ -154,15 +155,20 @@ export class CDPClient {
     this.rejectAllPending(new Error('Client disconnected'));
   }
 
+  private get effectivePlatform(): Platform {
+    return this._connectedTarget?.platform ?? null;
+  }
+
   async evaluate(expression: string, awaitPromise = false): Promise<EvaluateResult> {
     if (awaitPromise) {
       return this.evaluateAsync(expression);
     }
 
+    const timeout = defaultTimeout(this.effectivePlatform);
     const result = await this.sendWithTimeout('Runtime.evaluate', {
       expression,
       returnByValue: true,
-    }, CDP_TIMEOUT_MS) as { result?: { value?: unknown }; exceptionDetails?: { text?: string; exception?: { description?: string } } };
+    }, timeout) as { result?: { value?: unknown }; exceptionDetails?: { text?: string; exception?: { description?: string } } };
 
     if (result?.exceptionDetails) {
       return {
@@ -178,8 +184,9 @@ export class CDPClient {
     // Hermes CDP doesn't support awaitPromise — use global slot + polling
     // Values are JSON-serialized inside Hermes to handle non-serializable objects
     // A deferred cleanup timer ensures the slot is removed even if the caller times out
+    const timeout = defaultTimeout(this.effectivePlatform);
     const slot = '__rn_agent_async_' + (++this.slotId) + '_' + Date.now();
-    const ASYNC_CLEANUP_MS = CDP_TIMEOUT_MS * 2;
+    const ASYNC_CLEANUP_MS = timeout * 2;
     const wrapper = `(function() {
       function safeVal(v) {
         try { return JSON.stringify(v); } catch(e) { return JSON.stringify(String(v)); }
@@ -197,7 +204,7 @@ export class CDPClient {
     const initResult = await this.sendWithTimeout('Runtime.evaluate', {
       expression: wrapper,
       returnByValue: true,
-    }, CDP_TIMEOUT_MS) as { exceptionDetails?: { text?: string; exception?: { description?: string } } };
+    }, timeout) as { exceptionDetails?: { text?: string; exception?: { description?: string } } };
 
     if (initResult?.exceptionDetails) {
       return {
@@ -207,9 +214,9 @@ export class CDPClient {
       };
     }
 
-    // B45 fix: Use absolute deadline to guarantee total wall-clock stays within CDP_TIMEOUT_MS.
+    // B45 fix: Use absolute deadline to guarantee total wall-clock stays within timeout.
     // Each poll gets only the remaining time (min 500ms) to avoid overshooting.
-    const deadline = Date.now() + CDP_TIMEOUT_MS;
+    const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const remaining = deadline - Date.now();
       if (remaining < 500) break;
@@ -241,11 +248,11 @@ export class CDPClient {
       expression: `delete globalThis['${slot}']`,
       returnByValue: true,
     }, 1000).catch(() => {});
-    return { error: 'Promise did not resolve within ' + CDP_TIMEOUT_MS + 'ms' };
+    return { error: 'Promise did not resolve within ' + timeout + 'ms' };
   }
 
   async send(method: string, params?: unknown): Promise<unknown> {
-    return this.sendWithTimeout(method, params, timeoutForMethod(method));
+    return this.sendWithTimeout(method, params, timeoutForMethod(method, this.effectivePlatform));
   }
 
   private handleMessage(data: WebSocket.RawData): void {
@@ -258,7 +265,7 @@ export class CDPClient {
 
   private async setup(): Promise<void> {
     const result = await performSetup({
-      send: (method, params, ms) => this.sendWithTimeout(method, params, ms ?? timeoutForMethod(method)),
+      send: (method, params, ms) => this.sendWithTimeout(method, params, ms ?? timeoutForMethod(method, this.effectivePlatform)),
       evaluate: (expr) => this.evaluate(expr),
       port: this._port,
       connectedTarget: this._connectedTarget,
@@ -281,7 +288,7 @@ export class CDPClient {
     wireEventHandlers(
       this.eventHandlers,
       { console: this._consoleBuffer, network: this._networkBuffer, log: this._logBuffer, scripts: this._scripts },
-      (method, params, ms) => this.sendWithTimeout(method, params, ms ?? timeoutForMethod(method)),
+      (method, params, ms) => this.sendWithTimeout(method, params, ms ?? timeoutForMethod(method, this.effectivePlatform)),
       () => this._isPaused,
       (v) => { this._isPaused = v; },
     );

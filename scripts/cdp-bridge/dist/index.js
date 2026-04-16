@@ -277,10 +277,11 @@ trackedTool('collect_logs', 'Collect logs from multiple sources in parallel: JS 
 }, createCollectLogsHandler(getClient));
 // --- agent-device tools (native device interaction) ---
 trackedTool('device_list', 'List all available iOS simulators and Android emulators. Returns device name, UDID, platform, and status. Use before device_snapshot action=open to confirm the target device.', {}, createDeviceListHandler());
-trackedTool('device_screenshot', 'Capture a screenshot of the active device screen. Returns image data or file path. Prefer JPEG for faster capture.', {
+trackedTool('device_screenshot', 'Capture a screenshot of the active device screen. Returns image data or file path. Prefer JPEG for faster capture. When both iOS sim and Android emulator are booted, defaults to the platform of the currently connected CDP target; override with `platform` if needed.', {
     path: z.string().optional().describe('Output file path (default: auto-generated in /tmp). Use .jpg extension for JPEG.'),
     format: z.enum(['jpeg', 'png']).optional().describe('Image format (default: auto-detect from path extension, or jpeg)'),
-}, createDeviceScreenshotHandler());
+    platform: z.enum(['ios', 'android']).optional().describe('Target device platform. Defaults to the currently-connected CDP target platform.'),
+}, createDeviceScreenshotHandler(getClient));
 trackedTool('device_snapshot', 'Manage device sessions and capture UI snapshots. action=open starts a session (required before other device_ tools). action=snapshot returns the accessibility tree with @ref identifiers for device_press/device_fill. action=close ends the session.', {
     action: z.enum(['open', 'close', 'snapshot']).default('snapshot').describe('open: start session for an app. snapshot: capture UI tree with element refs. close: end session.'),
     appId: z.string().optional().describe('App bundle ID — required for action=open (e.g. "com.example.app")'),

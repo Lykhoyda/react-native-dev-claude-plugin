@@ -378,6 +378,13 @@ export async function runAgentDevice(cliArgs, opts = {}) {
     if (sessionName) {
         args.push('--session', sessionName);
     }
+    else if (opts.platform) {
+        // B117/D638: when no session is open but a platform hint is provided (e.g. from
+        // CDPClient.connectedTarget.platform), pass --platform so agent-device doesn't
+        // default to whichever booted device it finds first. Avoids wrong-device
+        // screenshots when both iOS sim and Android emulator are booted.
+        args.push('--platform', opts.platform);
+    }
     try {
         const { stdout } = await execFile('agent-device', args, {
             timeout: EXEC_TIMEOUT,

@@ -1,3 +1,4 @@
+import type { CDPClient } from '../cdp-client.js';
 import { runAgentDevice } from '../agent-device-wrapper.js';
 import type { ToolResult } from '../utils.js';
 
@@ -22,6 +23,18 @@ export function buildScreenshotArgs(args: { path?: string; format?: string }, no
   return ['screenshot', '--out', outputPath];
 }
 
-export function createDeviceScreenshotHandler(): (args: { path?: string; format?: string }) => Promise<ToolResult> {
-  return async (args) => runAgentDevice(buildScreenshotArgs(args));
+/**
+ * B117/D638: device_screenshot now accepts an optional `platform` and, when not
+ * provided, falls back to the current CDP target's platform. Prevents
+ * wrong-device screenshots when both iOS sim and Android emulator are booted.
+ * getClient is optional so existing callers/tests still compile.
+ */
+export function createDeviceScreenshotHandler(
+  getClient?: () => CDPClient,
+): (args: { path?: string; format?: string; platform?: 'ios' | 'android' }) => Promise<ToolResult> {
+  return async (args) => {
+    const platform: 'ios' | 'android' | null =
+      args.platform ?? (getClient?.()?.connectedTarget?.platform as 'ios' | 'android' | undefined) ?? null;
+    return runAgentDevice(buildScreenshotArgs(args), { platform });
+  };
 }

@@ -181,3 +181,112 @@ test('selectTarget: legacy string signature still works', () => {
   assert.equal(sorted.length, 1);
   assert.equal(sorted[0].id, '1');
 });
+
+// ── B116 / D639: platform inference via simctl listapps + adb pm list ──
+
+import { parseSimctlListapps, inferPlatforms } from '../../dist/cdp/discovery.js';
+
+test('parseSimctlListapps extracts top-level bundle IDs only', () => {
+  const input = `{
+    "com.apple.Bridge" =     {
+        CFBundleIdentifier = "com.apple.Bridge";
+        GroupContainers =         {
+            "group.com.apple.bridge" = "file:///...";
+            "243LU875E5.groups.com.apple.podcasts" = "file:///...";
+        };
+    };
+    "com.rndevagent.testapp" =     {
+        CFBundleIdentifier = "com.rndevagent.testapp";
+    };
+}`;
+  const ids = parseSimctlListapps(input);
+  assert.deepEqual([...ids].sort(), ['com.apple.Bridge', 'com.rndevagent.testapp']);
+});
+
+test('parseSimctlListapps skips nested GroupContainers entries', () => {
+  const input = `    "com.real" =     {
+        GroupContainers = {
+            "group.com.fake" = "...";
+        };
+    };`;
+  const ids = parseSimctlListapps(input);
+  assert.equal(ids.has('com.real'), true);
+  assert.equal(ids.has('group.com.fake'), false);
+});
+
+test('parseSimctlListapps handles empty input', () => {
+  assert.equal(parseSimctlListapps('').size, 0);
+  assert.equal(parseSimctlListapps('{}').size, 0);
+});
+
+test('inferPlatforms tags android-only bundle as android', () => {
+  const targets = [{ id: '1', description: 'com.android.only' }];
+  inferPlatforms(targets, {
+    readAndroid: () => new Set(['com.android.only']),
+    readIOS: () => new Set(),
+  });
+  assert.equal(targets[0].platform, 'android');
+  assert.equal(targets[0].ambiguousPlatform, undefined);
+});
+
+test('inferPlatforms tags iOS-only bundle as ios (was wrongly tagged android pre-B116)', () => {
+  const targets = [{ id: '1', description: 'com.ios.only' }];
+  inferPlatforms(targets, {
+    readAndroid: () => new Set(), // adb running but this bundle not installed on Android
+    readIOS: () => new Set(['com.ios.only']),
+  });
+  assert.equal(targets[0].platform, 'ios');
+  assert.equal(targets[0].ambiguousPlatform, undefined);
+});
+
+test('inferPlatforms marks ambiguous when bundleId is on both platforms', () => {
+  const targets = [
+    { id: '1', description: 'com.dual.app' },
+    { id: '2', description: 'com.dual.app' },
+  ];
+  inferPlatforms(targets, {
+    readAndroid: () => new Set(['com.dual.app']),
+    readIOS: () => new Set(['com.dual.app']),
+  });
+  // Default to ios, but flag for downstream disambiguation
+  for (const t of targets) {
+    assert.equal(t.platform, 'ios');
+    assert.equal(t.ambiguousPlatform, true);
+  }
+});
+
+test('inferPlatforms defaults to ios when both readers return null (no tooling)', () => {
+  const targets = [{ id: '1', description: 'com.some.app' }];
+  inferPlatforms(targets, {
+    readAndroid: () => null,
+    readIOS: () => null,
+  });
+  assert.equal(targets[0].platform, 'ios');
+});
+
+test('inferPlatforms defaults to ios when bundle is in neither set', () => {
+  const targets = [{ id: '1', description: 'com.unknown.app' }];
+  inferPlatforms(targets, {
+    readAndroid: () => new Set(['com.other.app']),
+    readIOS: () => new Set(['com.different.app']),
+  });
+  assert.equal(targets[0].platform, 'ios');
+});
+
+test('inferPlatforms handles mixed targets correctly', () => {
+  const targets = [
+    { id: '1', description: 'com.android.only' },
+    { id: '2', description: 'com.ios.only' },
+    { id: '3', description: 'com.dual.app' },
+    { id: '4', description: 'com.unknown' },
+  ];
+  inferPlatforms(targets, {
+    readAndroid: () => new Set(['com.android.only', 'com.dual.app']),
+    readIOS: () => new Set(['com.ios.only', 'com.dual.app']),
+  });
+  assert.equal(targets[0].platform, 'android');
+  assert.equal(targets[1].platform, 'ios');
+  assert.equal(targets[2].platform, 'ios');
+  assert.equal(targets[2].ambiguousPlatform, true);
+  assert.equal(targets[3].platform, 'ios');
+});
