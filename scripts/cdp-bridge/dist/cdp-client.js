@@ -726,6 +726,19 @@ export class CDPClient {
         logger.info('CDP', `Helpers injected (v11), network mode: ${this._networkMode}`);
         this.setActiveFlag();
         detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; logger.debug('CDP', `Bridge detection: present=${r.present}, version=${r.version}`); }).catch(() => { });
+        // D626 (B1 fix): Probe whether Network.enable actually delivers events.
+        // On RN < 0.83, Hermes accepts Network.enable without error but never
+        // fires requestWillBeSent/responseReceived. Probe with a small fetch
+        // and check if the buffer grows within 500ms.
+        if (this._networkMode === 'cdp') {
+            const bufSizeBefore = this._networkBuffer.size;
+            await this.evaluate(`void fetch('http://localhost:${this._port}/status').catch(function(){})`);
+            await new Promise(r => setTimeout(r, 500));
+            if (this._networkBuffer.size <= bufSizeBefore) {
+                logger.info('CDP', 'Network.enable accepted but no events fired (RN < 0.83) — falling back to hooks');
+                this._networkMode = 'none';
+            }
+        }
         if (this._networkMode === 'none') {
             const hookResult = await this.evaluate(NETWORK_HOOK_SCRIPT);
             if (hookResult.error) {
