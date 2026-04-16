@@ -1,14 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import WebSocket from 'ws';
 import { RingBuffer } from './ring-buffer.js';
 import { INJECTED_HELPERS, NETWORK_HOOK_SCRIPT } from './injected-helpers.js';
 import { detectBridge } from './bridge-detector.js';
 import { logger } from './logger.js';
-const CDP_ACTIVE_FLAG = join(tmpdir(), 'rn-dev-agent-cdp-active');
-const CDP_SESSION_FILE = join(tmpdir(), 'rn-dev-agent-cdp-session.json');
+import { resetState, setActiveFlag, clearActiveFlag, sleep } from './cdp/state.js';
 const CDP_TIMEOUT_FAST = 1500;
 const CDP_TIMEOUT_MS = 5000;
 const CDP_TIMEOUT_SLOW = 30000;
@@ -103,32 +99,6 @@ export class CDPClient {
             ? `(function() { var fb = false; try { var r = __RN_DEV_BRIDGE__.${call}; var p = JSON.parse(r); if (p && (p.__agent_error || p.error)) fb = true; else return r; } catch(e) { fb = true; } if (fb) return __RN_AGENT.${call}; })()`
             : `__RN_AGENT.${call}`;
     }
-    setActiveFlag() {
-        try {
-            writeFileSync(CDP_ACTIVE_FLAG, String(process.pid));
-        }
-        catch { /* best-effort */ }
-        try {
-            writeFileSync(CDP_SESSION_FILE, JSON.stringify({
-                port: this._port,
-                platform: this._connectedTarget?.platform ?? null,
-                target: this._connectedTarget?.title ?? null,
-                pid: process.pid,
-                connectedAt: new Date().toISOString(),
-            }));
-        }
-        catch { /* best-effort */ }
-    }
-    clearActiveFlag() {
-        try {
-            unlinkSync(CDP_ACTIVE_FLAG);
-        }
-        catch { /* may not exist */ }
-        try {
-            unlinkSync(CDP_SESSION_FILE);
-        }
-        catch { /* may not exist */ }
-    }
     async reinjectHelpers(waitTimeout) {
         if (!this.isConnected)
             return false;
@@ -145,7 +115,7 @@ export class CDPClient {
             return false;
         }
         this._helpersInjected = true;
-        this.setActiveFlag();
+        setActiveFlag(this._port, this._connectedTarget);
         detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; }).catch(() => { });
         return true;
     }
@@ -390,21 +360,13 @@ export class CDPClient {
             this._softReconnectRequested = true;
             const bailDeadline = Date.now() + 3_000;
             while (this.reconnecting && Date.now() < bailDeadline) {
-                await this.sleep(200);
+                await sleep(200);
             }
             this._softReconnectRequested = false;
         }
         this.reconnecting = true;
         try {
-            this._state = 'disconnected';
-            this._helpersInjected = false;
-            this._bridgeDetected = false;
-            this._bridgeVersion = null;
-            this._connectedTarget = null;
-            this._logDomainEnabled = false;
-            this._profilerAvailable = false;
-            this._heapProfilerAvailable = false;
-            this._scripts.clear();
+            resetState(this);
             if (this.ws) {
                 this.ws.removeAllListeners();
                 if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
@@ -424,16 +386,8 @@ export class CDPClient {
     }
     async disconnect() {
         this.disposed = true;
-        this._state = 'disconnected';
-        this._helpersInjected = false;
-        this._bridgeDetected = false;
-        this._bridgeVersion = null;
-        this._connectedTarget = null;
-        this._logDomainEnabled = false;
-        this._profilerAvailable = false;
-        this._heapProfilerAvailable = false;
-        this._scripts.clear();
-        this.clearActiveFlag();
+        resetState(this);
+        clearActiveFlag();
         this.stopBackgroundPoll();
         if (this.ws) {
             this.ws.removeAllListeners();
@@ -518,7 +472,7 @@ export class CDPClient {
                     return { value: val.v };
                 }
             }
-            await this.sleep(100);
+            await sleep(100);
         }
         void this.sendWithTimeout('Runtime.evaluate', {
             expression: `delete globalThis['${slot}']`,
@@ -567,7 +521,7 @@ export class CDPClient {
                 }
                 // Code 1006 and all other errors — retry (1006 is the most common transient failure)
                 if (i < retries - 1)
-                    await this.sleep(2000);
+                    await sleep(2000);
             }
         }
         this._state = 'disconnected';
@@ -724,7 +678,7 @@ export class CDPClient {
         }
         this._helpersInjected = true;
         logger.info('CDP', `Helpers injected (v11), network mode: ${this._networkMode}`);
-        this.setActiveFlag();
+        setActiveFlag(this._port, this._connectedTarget);
         detectBridge(this).then((r) => { this._bridgeDetected = r.present; this._bridgeVersion = r.version; logger.debug('CDP', `Bridge detection: present=${r.present}, version=${r.version}`); }).catch(() => { });
         // D626 (B1 fix): Probe whether Network.enable actually delivers events.
         // On RN < 0.83, Hermes accepts Network.enable without error but never
@@ -851,20 +805,12 @@ export class CDPClient {
             catch {
                 // Not ready yet
             }
-            await this.sleep(REACT_READY_POLL_MS);
+            await sleep(REACT_READY_POLL_MS);
         }
         console.error(`CDP: React not ready after ${timeout}ms — helpers will be injected anyway`);
     }
     handleClose(code) {
-        this._state = 'disconnected';
-        this._helpersInjected = false;
-        this._bridgeDetected = false;
-        this._bridgeVersion = null;
-        this._connectedTarget = null;
-        this._logDomainEnabled = false;
-        this._profilerAvailable = false;
-        this._heapProfilerAvailable = false;
-        this._scripts.clear();
+        resetState(this);
         if (this.disposed || this.reconnecting)
             return;
         logger.info('CDP', `WebSocket closed (code ${code}), starting reconnect`);
@@ -882,7 +828,7 @@ export class CDPClient {
         });
     }
     async reconnect() {
-        await this.sleep(RECONNECT_DELAY_MS);
+        await sleep(RECONNECT_DELAY_MS);
         for (let i = 0; i < RECONNECT_ATTEMPTS; i++) {
             this._reconnectAttemptCount = i + 1;
             this._lastReconnectAttempt = new Date().toISOString();
@@ -903,13 +849,13 @@ export class CDPClient {
                         this.reconnecting = false;
                         return;
                     }
-                    await this.sleep(RECONNECT_RETRY_MS);
+                    await sleep(RECONNECT_RETRY_MS);
                 }
             }
         }
         this.reconnecting = false;
         this._state = 'disconnected';
-        this.clearActiveFlag();
+        clearActiveFlag();
         console.error('CDP: reconnect failed after ' + RECONNECT_ATTEMPTS + ' attempts. Starting background poll...');
         this.startBackgroundPoll();
     }
@@ -976,8 +922,5 @@ export class CDPClient {
                 reject(err instanceof Error ? err : new Error(`ws.send failed: ${err}`));
             }
         });
-    }
-    sleep(ms) {
-        return new Promise(r => setTimeout(r, ms));
     }
 }
