@@ -2,7 +2,7 @@
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that turns Claude into a React Native development partner. It explores your codebase, designs architecture, implements features, then **verifies everything live on the simulator** — reading the component tree, store state, and navigation stack through Chrome DevTools Protocol.
 
-**52 MCP tools** | **5 agents** | **13 commands** | **148 tests** | **46 best-practice rules** | [Full documentation](https://lykhoyda.github.io/rn-dev-agent/)
+**53 MCP tools** | **5 agents** | **13 commands** | **249 tests** | **46 best-practice rules** | [Full documentation](https://lykhoyda.github.io/rn-dev-agent/)
 
 ---
 
@@ -103,13 +103,21 @@ if (__DEV__) {
 
 ## MCP Tools
 
-52 tools across three layers. [Full reference](https://lykhoyda.github.io/rn-dev-agent/tools/)
+53 tools across three layers. [Full reference](https://lykhoyda.github.io/rn-dev-agent/tools/)
 
 | Category | Count | Examples | Docs |
 |----------|-------|---------|------|
-| **CDP** (React internals) | 25 | `cdp_component_tree`, `cdp_store_state`, `cdp_evaluate`, `cdp_set_shared_value` | [CDP tools](https://lykhoyda.github.io/rn-dev-agent/tools/#cdp-tools) |
+| **CDP** (React internals) | 26 | `cdp_component_tree`, `cdp_store_state`, `cdp_evaluate`, `cdp_set_shared_value`, `cdp_native_errors` | [CDP tools](https://lykhoyda.github.io/rn-dev-agent/tools/#cdp-tools) |
 | **Device** (native interaction) | 14 | `device_find`, `device_press`, `device_fill`, `device_screenshot` | [Device tools](https://lykhoyda.github.io/rn-dev-agent/tools/#device-tools) |
 | **Testing** (E2E + proof) | 13 | `proof_step`, `cross_platform_verify`, `maestro_run` | [Testing tools](https://lykhoyda.github.io/rn-dev-agent/tools/#testing-tools) |
+
+### What's new in v0.23.0 (2026-04-16)
+
+- **`cdp_native_errors`** — surfaces `simctl log`/`adb logcat` entries for errors that fire before `__RN_AGENT` injects (missing native modules, bundle-fetch failures, FATAL EXCEPTIONs). `cdp_status` hints at it automatically when JS-layer signals are blank.
+- **Multi-device correctness** — `cdp_connect` accepts `targetId`/`bundleId` filters to disambiguate zombie Expo Go pages; `inferPlatforms` cross-checks `simctl listapps` and `adb pm list`; `device_screenshot` accepts `platform` and inherits from the connected CDP target.
+- **Android speed parity** — platform-aware CDP timeouts (2× on Android emulator) eliminate `typeText` false-negatives; real Android flow went from **16.1s/3 fails to 7.2s/0 fails** in the same benchmark.
+- **`device_snapshot attachOnly: true`** — skip app launch when already running, saving the ~12s restart cascade.
+- **91 new unit tests** (158 → 249) locking in the extracted `cdp/*` modules, platform filters, and native-error parsers.
 
 ## Architecture
 

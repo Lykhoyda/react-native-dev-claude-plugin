@@ -4,6 +4,44 @@ All notable changes to rn-dev-agent will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.23.0] — 2026-04-16
+
+Major session of correctness and performance fixes surfaced by end-to-end benchmarks and a live feature-dev run. MCP server bumped to 0.18.0.
+
+### Added
+- **`cdp_native_errors` MCP tool** — reads `xcrun simctl log show` on iOS / `adb logcat -d` on Android, parses known native-module / bundle-fetch / FATAL EXCEPTION patterns, dedupes by message body. Fills the gap when `cdp_error_log` / `cdp_console_log` stay empty because native errors fired before `__RN_AGENT` injected. `cdp_status` also emits a suspicion hint pointing at this tool when `connected && !helpersInjected && !hasRedBox && errorCount === 0` (B114/D642).
+- **`targetId` + `bundleId` filters on `cdp_connect`** — disambiguate zombie Expo Go host pages from real app targets (B111/D635).
+- **`attachOnly: true` on `device_snapshot`** — skip app launch when it's already running; verifies via `xcrun simctl spawn booted launchctl list` / `adb shell pidof`. Prevents the ~12s app-restart cascade. Exported `isAppRunning(platform, bundleId, probes?)` helper (B112/D641).
+- **Platform-aware CDP timeouts** — `defaultTimeout(platform)` and `timeoutForMethod(method, platform)` apply a 2× Android multiplier via a single constant `ANDROID_MULTIPLIER`. `CDPClient` routes `Runtime.evaluate` paths through it using `this._connectedTarget?.platform`. iOS unchanged (B118/D637).
+- **`platform` param on `device_screenshot`** — inherits from `client.connectedTarget?.platform` or accepts explicit override. When no active session is open, the wrapper appends `--platform <p>` to agent-device CLI args. Session-bound dispatch remains the canonical path (B117/D638, partial — upstream agent-device CLI ignores `--platform` without a session; workaround via open session).
+- **`simctl listapps` cross-check in platform inference** — `cdp/discovery.ts::inferPlatforms` now reads both `adb shell pm list packages` AND `xcrun simctl listapps booted`; targets installed on both platforms are flagged with `ambiguousPlatform: true`. Readers are injectable for unit testing (B116/D639).
+- **Tab-dispatch fix for `cdp_nav_graph`** — `buildTabNavigateArgs(tab, screen, params)` emits the flat `ref.navigate(tab, params)` when target === tab, nested form when they differ. Prevents self-referential `navigate('TasksTab', { screen: 'TasksTab' })` that left RN stuck on the old tab (B115/D640).
+
+### Fixed
+- **B110: MCP server reports stale version** — server version now read from `package.json` at module load; `sync-versions.sh` gained a regex guard against hardcoded `version:` literals in src/ (D630).
+- **B113: `device_screenshot --format` always rejected** — agent-device >= 0.8.0 doesn't accept `--format`. Refactored into `buildScreenshotArgs()` + thin delegate; now uses `--out <path>` explicitly, extension drives encoding (D636).
+- **Freshness probe caching** — 2s TTL per `connectionGeneration`, WeakMap-keyed. Saves 30-150ms per back-to-back tool call by skipping redundant `__RN_AGENT.__v` round-trips (D631).
+- **Structured error codes on `ResultEnvelope`** — `ToolErrorCode` union (`STALE_TARGET`, `HELPERS_STALE`, `RECONNECT_TIMEOUT`, `NOT_CONNECTED`, `HELPERS_NOT_INJECTED`). Agents can branch on `code` instead of regex on error text. Back-compat preserved (D634).
+- **Extracted `cdp/recovery.ts`** — `probeFreshness()` + `recoverFromStaleTarget()` moved out of `utils.ts`. Replaced error-string matching for stale detection with the `__RN_AGENT.__v` probe as the primary signal (D633).
+- **`RingBuffer` requestId index** — optional `indexKey` extractor builds a parallel `Map<key, item>`; `getByKey(id)` is O(1). Swapped 5 call sites (`event-handlers.ts` ×4, `tools/network-body.ts` ×1) from `findLast` → `getByKey` (D632).
+
+### Refactors
+- **CDP module extraction continued** — `cdp/connect.ts` (213 lines), `cdp/helper-expr.ts`, `cdp/recovery.ts` (99 lines). CDPClient facade shrunk further; every module now has a typed Context interface instead of reaching into the facade directly.
+- **`cdp/state.ts` setter-based `ResettableState` interface** — replaces `as unknown as CDPResettableState` cast. Renaming a private field on `CDPClient` now produces a real TypeScript error.
+
+### Benchmarks validated live
+
+Cross-platform benchmark (Task Power User flow + Priority Filter Row feature):
+- **iOS (iPhone 17 Pro, iOS 26.3)**: 3.37s / 29 calls / 0 failures (`cdp_interact` p50 7ms)
+- **Android (Pixel_9_Pro, API 37) pre-fix**: 16.11s / 32 calls / 3 failures (incl. 5.3s `typeText` timeout)
+- **Android post-fix**: ~7.2s / 24 calls / 0 failures — **55% faster, zero false-negative timeouts** (`cdp_interact` p50 16ms, p95 45ms)
+
+### Test count
+158 → **249** (+91 this release cycle).
+
+### Decisions logged
+D630 through D642 in `rn-dev-agent-workspace/docs/DECISIONS.md`.
+
 ## [0.22.0] — 2026-04-16
 
 ### Added

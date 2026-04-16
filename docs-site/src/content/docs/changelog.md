@@ -9,6 +9,54 @@ All notable changes to rn-dev-agent will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.23.0] — 2026-04-16
+
+Major session of correctness and performance fixes surfaced by end-to-end benchmarks and a live feature-dev run. MCP server bumped to 0.18.0.
+
+### Added
+- **`cdp_native_errors` MCP tool** — reads `xcrun simctl log show` on iOS / `adb logcat -d` on Android, parses known native-module / bundle-fetch / FATAL EXCEPTION patterns, dedupes by message body. Fills the gap when `cdp_error_log` / `cdp_console_log` stay empty because native errors fired before `__RN_AGENT` injected. `cdp_status` also emits a suspicion hint pointing at this tool when `connected && !helpersInjected && !hasRedBox && errorCount === 0` (B114/D642).
+- **`targetId` + `bundleId` filters on `cdp_connect`** — disambiguate zombie Expo Go host pages from real app targets (B111/D635).
+- **`attachOnly: true` on `device_snapshot`** — skip app launch when it's already running; verifies via `xcrun simctl spawn booted launchctl list` / `adb shell pidof`. Prevents the ~12s app-restart cascade (B112/D641).
+- **Platform-aware CDP timeouts** — `defaultTimeout(platform)` and `timeoutForMethod(method, platform)` apply a 2× Android multiplier. iOS unchanged (B118/D637).
+- **`platform` param on `device_screenshot`** — inherits from `client.connectedTarget?.platform` or accepts explicit override. When a device session is open, session-bound dispatch routes correctly (B117/D638).
+- **`simctl listapps` cross-check in platform inference** — `inferPlatforms` reads both `adb shell pm list packages` AND `xcrun simctl listapps booted`; targets on both platforms are flagged with `ambiguousPlatform: true` (B116/D639).
+- **Tab-dispatch fix for `cdp_nav_graph`** — `buildTabNavigateArgs` emits the flat `ref.navigate(tab, params)` when target === tab, nested form when they differ (B115/D640).
+
+### Fixed
+- **B110: MCP server reports stale version** — server version now read from `package.json` at module load; `sync-versions.sh` guards against hardcoded `version:` literals (D630).
+- **B113: `device_screenshot --format` always rejected** — now uses `--out <path>` explicitly; extension drives encoding (D636).
+- **Freshness probe caching** — 2s TTL per `connectionGeneration`, WeakMap-keyed. Saves 30-150ms per back-to-back tool call (D631).
+- **Structured error codes on `ResultEnvelope`** — `ToolErrorCode` union lets agents branch on `code` instead of regex on error text (D634).
+- **Extracted `cdp/recovery.ts`** — `probeFreshness()` + `recoverFromStaleTarget()` moved out of `utils.ts`. Replaced error-string matching with the `__RN_AGENT.__v` probe (D633).
+- **`RingBuffer` requestId index** — `getByKey(id)` is O(1); swapped 5 call sites from `findLast` → `getByKey` (D632).
+
+### Benchmarks validated live
+
+Cross-platform benchmark (Task Power User flow + Priority Filter Row feature):
+- **iOS**: 3.37s / 29 calls / 0 failures (`cdp_interact` p50 7ms)
+- **Android pre-fix**: 16.11s / 32 calls / 3 failures (incl. 5.3s `typeText` timeout)
+- **Android post-fix**: ~7.2s / 24 calls / 0 failures — **55% faster, zero false-negative timeouts** (`cdp_interact` p50 16ms, p95 45ms)
+
+### Test count
+158 → **249** (+91 this release cycle).
+
+## [0.22.0] — 2026-04-16
+
+Proof-capture infrastructure, fast-runner robustness, and the `cdp_set_shared_value` tool for Reanimated animation proofs.
+
+### Added
+- **`cdp_set_shared_value` tool** — Drive Reanimated SharedValue animations by testID for proof captures.
+- **Fast-runner auto-restart** — When fast-runner dies mid-session, `tryFastRunner` automatically attempts one restart.
+- **Reload counter + NativeWind corruption warning** — `cdp_status` warns after 5+ `cdp_reload` calls in a session.
+- **Auto-open device session in Phase 5.5** — Pipeline mandates opening a device session at verification start.
+
+### Fixed
+- **B103**: `cdp_navigate` false success — fallback now verifies target screen exists.
+- **B106**: `device_scroll`/`device_swipe` deadlock on Reanimated screens.
+- **B107**: `deviceId` parsing for agent-device v0.8.0.
+- **R2**: `device_screenshot` ignores requested path.
+- **R5**: Scroll amount semantics diverge.
+
 ## [0.19.2] — 2026-04-13
 
 ### Fixed
