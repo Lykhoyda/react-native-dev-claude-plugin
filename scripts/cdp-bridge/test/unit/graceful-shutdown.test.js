@@ -117,8 +117,11 @@ test('gracefulShutdown: stopFastRunner throw is non-fatal (B76/D644)', async () 
 });
 
 test('gracefulShutdown: timeout forces exit if cleanup hangs (B76/D644)', async () => {
-  // disconnect() never resolves — simulates a stuck cleanup path
-  const { client } = mockClient(() => new Promise(() => {}));
+  // disconnect() doesn't resolve until we let it — simulates a stuck cleanup path.
+  // Hold the resolve ref so we can release it after the test asserts; otherwise
+  // node:test in CI cancels the file because the promise is permanently pending.
+  let releaseCleanup;
+  const { client } = mockClient(() => new Promise((r) => { releaseCleanup = r; }));
   const { exits, exitFn } = captureExit();
 
   const shutdown = buildGracefulShutdown({
@@ -134,6 +137,10 @@ test('gracefulShutdown: timeout forces exit if cleanup hangs (B76/D644)', async 
 
   assert.deepEqual(exits, [0], 'exit forced via timeout');
   assert.ok(elapsed >= 40 && elapsed < 500, `timeout respected: ${elapsed}ms`);
+
+  // Release the dangling cleanup promise so node:test drains cleanly in CI
+  releaseCleanup();
+  await new Promise((r) => setImmediate(r));
 });
 
 test('gracefulShutdown: concurrent calls during slow disconnect share one cleanup (B76/D644 race)', async () => {
