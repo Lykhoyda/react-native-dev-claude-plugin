@@ -35,13 +35,16 @@ export function buildGracefulShutdown(deps) {
                 logger.warn('MCP', `shutdown: stopFastRunner failed: ${err instanceof Error ? err.message : err}`);
             }
         })();
+        // Timeout is NOT unref'd: it must keep the event loop alive so it can fire
+        // even if no other work is pending (otherwise Node would exit the loop while
+        // cleanup is still pending, and process.exit never runs). The timer is always
+        // cleared on the happy path so it doesn't block shutdown when cleanup wins.
         let timeoutHandle = null;
         const timeout = new Promise((resolve) => {
             timeoutHandle = setTimeout(() => {
                 logger.warn('MCP', `shutdown: cleanup timeout after ${timeoutMs}ms, forcing exit`);
                 resolve();
             }, timeoutMs);
-            timeoutHandle.unref();
         });
         await Promise.race([cleanup, timeout]);
         if (timeoutHandle)
